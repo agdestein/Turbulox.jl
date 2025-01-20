@@ -1,3 +1,4 @@
+"Simulate turbulence in a box."
 module Turbulox
 
 using Adapt
@@ -20,6 +21,7 @@ Problem setup.
 - `n::Int`: Number of grid points in each dimension.
 - `visc::Real`: Viscosity. This value is also used to infer the floating point type, so make sure it is a `Float32` or `Float64`.
 - `backend = CPU()`: KernelAbstractions.jl backend. For Nvidia GPUs, do `using CUDA` and set to `CUDABackend()`.
+- `workgroupsize = 64`: Kernel work group size.
 """
 problem_setup(; D = Val(2), n, visc, backend = CPU(), workgroupsize = 64) =
     (; D, n, visc, backend, workgroupsize)
