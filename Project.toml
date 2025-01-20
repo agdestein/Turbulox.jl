@@ -1,0 +1,7 @@
+name = "Turbulox"
+uuid = "25c03aae-1219-43c4-862d-5fc87f57ed09"
+authors = ["Syver Døving Agdestein <syverda@gmail.com> and contributors"]
+version = "1.0.0-DEV"
+
+[compat]
+julia = "1"
