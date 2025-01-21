@@ -28,7 +28,7 @@ You solve the incompressible Navier-Stokes equations with the following rules:
 - The flow is incompressible.
 - The grid is uniform and staggered.
 - There is no pressure 🥵.
-- Single process, single GPU. Nowadays you can fit $1000^3++$ grid points on a single H100.
+- Single process, single GPU. Nowadays you can fit $1000^3$++ grid points on a single H100.
 
 You get to choose:
 
@@ -56,7 +56,7 @@ $$\partial_t u_i + \partial_j (u_i u_j) = -\partial_i p + \nu \partial_{jj} u_i 
 
 Discretization: Fully conservative combination of
 central difference stencils from
-[Morinshini et al.](https://www.sciencedirect.com/science/article/pii/S0021999198959629)
+[Morinishi et al.](https://www.sciencedirect.com/science/article/pii/S0021999198959629)
 
 ## 🫣 Outlook
 
