@@ -12,45 +12,43 @@ using StaticArrays # For tensors
 "Get value from `Val`."
 getval(::Val{x}) where {x} = x
 
+"Staggered grid of order `o` and dimension `d`."
+struct Grid{o,d}
+    "Number of grid points in each dimension."
+    n::Int
+    Grid(; order = 2, dim = 2, n) = new{order,dim}(n, unitindices(Val(dim)))
+end
+
+"Get order of grid."
+order(::Grid{o,d}) where {o,d} = o
+
+"Get physical dimension."
+dim(::Grid{o,d}) where {o,d} = d
+
+"Get unit index in dimension `α`."
+e(g::Grid, α) = CartesianIndex(ntuple(β -> β == α, dim(grid)))
+
+# Extend index periodically so that it stays within the domain.
+(g::Grid)(i::Integer) = mod1(i, g.n)
+(g::Grid)(I::CartesianIndex) = CartesianIndex(mod1.(I.I, g.n))
+
 """
 Problem setup.
 
 ## Kwargs
 
-- `D = Val(2)`: Physical dimension. This is wrapped in a `Val` to make it known at compile time.
-- `n::Int`: Number of grid points in each dimension.
+- `grid::Grid`: Grid setup.
 - `visc::Real`: Viscosity. This value is also used to infer the floating point type, so make sure it is a `Float32` or `Float64`.
 - `backend = CPU()`: KernelAbstractions.jl backend. For Nvidia GPUs, do `using CUDA` and set to `CUDABackend()`.
 - `workgroupsize = 64`: Kernel work group size.
 """
-problem_setup(; D = Val(2), n, visc, backend = CPU(), workgroupsize = 64) =
-    (; D, n, visc, backend, workgroupsize)
+problem_setup(; grid, visc, backend = CPU(), workgroupsize = 64) =
+    (; grid, visc, backend, workgroupsize)
 
-"Allocate empty scalar field."
-scalarfield(setup) = KernelAbstractions.zeros(
-    setup.backend,
-    typeof(setup.visc),
-    ntuple(Returns(setup.n), setup.D),
-)
-
-"Allocate empty vector field."
-vectorfield(setup) = KernelAbstractions.zeros(
-    setup.backend,
-    typeof(setup.visc),
-    ntuple(Returns(setup.n), setup.D)...,
-    getval(setup.D),
-)
-
-"Allocate empty tensor field."
-function tensorfield(setup)
-    (; backend, D, n, visc) = setup
-    d = getval(D)
-    d2 = d * d
-    T = typeof(visc)
-    KernelAbstractions.zeros(backend, SMatrix{d,d,T,d2}, ntuple(Returns(n), D))
-end
-
+include("initializers.jl")
 include("operators.jl")
+include("tensors.jl")
+include("closures.jl")
 include("time.jl")
 
 end

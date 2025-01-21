@@ -1,31 +1,45 @@
-"Extend index periodically so that it stays within the domain."
-function periodicindex end
-periodicindex(n) = i -> periodicindex(i, n)
-periodicindex(i::Integer, n) = mod1(i, n)
-periodicindex(I::CartesianIndex, n) = CartesianIndex(mod1.(I.I, n))
-
-"Get unit indices for given dimension."
-function unitindices end
-unitindices(::Val{2}) = CartesianIndex((1, 0)), CartesianIndex((0, 1))
-unitindices(::Val{3}) =
-    CartesianIndex((1, 0, 0)), CartesianIndex((0, 1, 0)), CartesianIndex((0, 0, 1))
-
 """
-Apply `kernel!` on `setup, args...` over the entire domain.
+Apply `kernel!` on `setup.grid, args...` over the entire domain.
 The `args` are typically input and output fields.
 The kernel should be of the form
 ```julia
 using KernelAbstractions
-@kernel function kernel!(setup, args...)
+@kernel function kernel!(grid, args...)
     # content
 end
 ```
 """
 function apply!(kernel!, setup, args...)
-    (; D, n, backend, workgroupsize) = setup
-    ndrange = ntuple(Returns(n), D)
-    kernel!(backend, workgroupsize)(setup, args...; ndrange)
+    (; grid, backend, workgroupsize) = setup
+    ndrange = ntuple(Returns(grid.n), dim(grid))
+    kernel!(backend, workgroupsize)(grid, args...; ndrange)
     nothing
+end
+
+# Vector field gradient δu[α] / δx[β].
+@inline δ(g::Grid{2}, u, X, α, β) =
+    if α == β
+        g.n * (u[X, α] - u[X-e(g, β)|>g, α])
+    else
+        g.n * (u[X+e(g, β)|>g, α] - u[X, α])
+    end
+@inline function δ(g::Grid{4}, u, X, α, β)
+    if α == β
+        δ1 = g.n * (u[X, α] - u[X-e(g, β)|>g, α])
+        δ3 = g.n * (u[X+e(g, β)|>g, α] - u[X-2e(g, β)|>g, α])
+    else
+        δ1 = g.n * (u[X+e(g, β)|>g, α] - u[X, α])
+        δ3 = g.n * (u[X+2e(g, β)|>g, α] - u[X-e(g, β)|>g, α])
+    end
+    9 * δ1 / 8 - δ3 / 8
+end
+
+# Scalar field gradient δp / δx[β].
+@inline δ(g::Grid{2}, p, X, β) = g.n * (p[X] - p[X-e(g, β)|>g])
+@inline function δ(g::Grid{4}, p, X, β)
+    δ1 = g.n * (p[X] - p[X-e(g, β)|>g])
+    δ3 = g.n * (p[X+e(g, β)|>g] - p[X-2e(g, β)|>g])
+    9 * δ1 / 8 - δ3 / 8
 end
 
 """
@@ -35,15 +49,38 @@ Put the result in `div`.
 divergence!
 
 @kernel function divergence!(setup, div, u)
-    (; D, n) = setup
-    per = periodicindex(n)
-    e = unitindices(D)
+    (; grid) = setup
     I = @index(Global, Cartesian)
-    dx = zero(eltype(div))
-    @unroll for α = 1:getval(D)
-        dx += n * (u[I, α] - u[I-e[α]|>per, α])
+    divI = zero(eltype(div))
+    @unroll for β in 1:dim(grid)
+        divI += δx(g, u, I, β)
     end
-    div[I] = dx
+    div[I] = divI
+end
+
+"Approximate the convective force ``\\partial_j (u_i u_j)``."
+function convterm end
+@inline function convterm(g::Grid{2}, x, i, j)
+    (; n) = g
+    ei, ej = e(g, i), e(g, β)
+    uij_a = (u[x-ej|>g, i] + u[x, i]) / 2
+    uij_b = (u[x, i] + u[x+ej|>g, i]) / 2
+    uji_a = (u[x-ej|>g, β] + u[x-ej+ei|>g, β]) / 2
+    uji_b = (u[x, β] + u[x+ei|>g, β]) / 2
+    ui_uj_a = uij_a * uji_a
+    ui_uj_b = uij_b * uji_b
+    n * (ui_uj_b - ui_uj_a)
+end
+@inline function convterm(g::Grid{4}, x, i, j)
+    (; n) = g
+    ei, ej = e(g, i), e(g, β)
+    uij_a = (u[x-ej|>g, i] + u[x, i]) / 2
+    uij_b = (u[x, i] + u[x+ej|>g, i]) / 2
+    uji_a = (u[x-ej|>g, β] + u[x-ej+ei|>g, β]) / 2
+    uji_b = (u[x, β] + u[x+ei|>g, β]) / 2
+    ui_uj_a = uij_a * uji_a
+    ui_uj_b = uij_b * uji_b
+    n * (ui_uj_b - ui_uj_a)
 end
 
 """
@@ -52,50 +89,51 @@ Add the force field to `f`.
 """
 convectiondiffusion!
 
-@kernel function convectiondiffusion!(setup, f, u)
-    (; D, n, visc) = setup
-    per = periodicindex(n)
-    e = unitindices(D)
+@kernel function convectiondiffusion!(g::Grid, visc, f, u)
     T = typeof(visc)
-    dims = 1:getval(D)
-    I = @index(Global, Cartesian)
-    @unroll for α in dims
-        fIα = f[I, α]
+    dims = 1:dim(g)
+    x = @index(Global, Cartesian)
+    @unroll for i in dims
+        fxi = f[x, i]
         @unroll for β in dims
-            eα, eβ = e[α], e[β]
-            uαβ1 = (u[I-eβ|>per, α] + u[I, α]) / 2
-            uαβ2 = (u[I, α] + u[I+eβ|>per, α]) / 2
-            uβα1 = (u[I-eβ|>per, β] + u[I-eβ+eα|>per, β]) / 2
-            uβα2 = (u[I, β] + u[I+eα|>per, β]) / 2
-            uαuβ1 = uαβ1 * uβα1
-            uαuβ2 = uαβ2 * uβα2
-            ∂βuα1 = n * (u[I, α] - u[I-eβ|>per, α])
-            ∂βuα2 = n * (u[I+eβ|>per, α] - u[I, α])
-            fIα += n * (visc * (∂βuα2 - ∂βuα1) - (uαuβ2 - uαuβ1))
+            ei, ej = e(g, i), e(g, β)
+            uij_a = (u[x-ej|>g, i] + u[x, i]) / 2
+            uij_b = (u[x, i] + u[x+ej|>g, i]) / 2
+            uji_a = (u[x-ej|>g, β] + u[x-ej+ei|>g, β]) / 2
+            uji_b = (u[x, β] + u[x+ei|>g, β]) / 2
+            ui_uj_a = uij_a * uji_a
+            ui_uj_b = uij_b * uji_b
+            δui_δxj_a = n * (u[x, i] - u[x-ej|>g, i])
+            δui_δxj_b = n * (u[x+ej|>g, i] - u[x, i])
+            fxi += n * (visc * (δui_δxj_b - δui_δxj_a) - (ui_uj_b - ui_uj_a))
         end
-        f[I, α] = fIα
+        f[x, i] = fxi
     end
 end
 
 "Create spectral Poisson solver from setup."
 function poissonsolver(setup)
-    (; backend, D, n, visc) = setup
+    (; backend, grid, visc) = setup
     T = typeof(visc)
+    d = dim(grid)
+    n = grid.n
+
+    @assert order isa Order2 "Todo: find ahat for Order4"
 
     # Since we use rfft, the first dimension is halved
-    kmax = ntuple(d -> d == 1 ? div(n, 2) + 1 : n, D)
+    kmax = ntuple(i -> i == 1 ? div(n, 2) + 1 : n, d)
 
     # Fourier transform of the discrete Laplacian
-    ahat = ntuple(D) do d
-        k = 0:kmax[d]-1
-        ahat = KernelAbstractions.allocate(backend, T, kmax[d])
+    ahat = ntuple(d) do i
+        k = 0:kmax[i]-1
+        ahat = KernelAbstractions.allocate(backend, T, kmax[i])
         @. ahat = 4 * sinpi(k / n)^2 * n^2
         ahat
     end
 
     # Placeholders for intermediate results
     phat = KernelAbstractions.allocate(backend, Complex{T}, kmax)
-    p = KernelAbstractions.allocate(backend, T, ntuple(Returns(n), D))
+    p = KernelAbstractions.allocate(backend, T, ntuple(Returns(n), d))
     plan = plan_rfft(p)
 
     function solver!(p)
@@ -130,13 +168,10 @@ end
 "Subtract pressure gradient."
 pressuregradient!
 
-@kernel function pressuregradient!(setup, u, p)
-    (; D, n) = setup
-    per = periodicindex(n)
-    e = unitindices(D)
-    I = @index(Global, Cartesian)
-    @unroll for α = 1:getval(D)
-        u[I, α] -= n * (p[I+e[α]|>per] - p[I])
+@kernel function pressuregradient!(grid, u, p)
+    x = @index(Global, Cartesian)
+    @unroll for i = 1:dim(grid)
+        u[x, i] -= δ(grid, p, x, i)
     end
 end
 
