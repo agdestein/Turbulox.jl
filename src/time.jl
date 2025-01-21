@@ -3,7 +3,7 @@
 "Deault right-hand side function (without projection)."
 function default_right_hand_side!(du, u, setup)
     fill!(du, 0)
-    apply!(convectiondiffusion!, setup, du, u)
+    apply!(convectiondiffusion!, setup, du, u, setup.visc)
     du
 end
 
@@ -51,7 +51,8 @@ end
 
 "Get proposed maximum time step for convection and diffusion terms."
 function propose_timestep(u, setup)
-    (; n, visc) = setup
+    (; grid, visc) = setup
+    (; n) = grid
     Δt_diff = 1 / (2 * visc * n^2)
     Δt_conv = minimum(u -> 1 / abs(u) / n, u)
     Δt = min(Δt_diff, Δt_conv)

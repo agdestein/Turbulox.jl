@@ -16,21 +16,21 @@ getval(::Val{x}) where {x} = x
 struct Grid{o,d}
     "Number of grid points in each dimension."
     n::Int
-    Grid(; order = 2, dim = 2, n) = new{order,dim}(n, unitindices(Val(dim)))
+    Grid(; order = 2, dim = 2, n) = new{order,dim}(n)
 end
 
 "Get order of grid."
-order(::Grid{o,d}) where {o,d} = o
+@inline order(::Grid{o,d}) where {o,d} = o
 
 "Get physical dimension."
-dim(::Grid{o,d}) where {o,d} = d
+@inline dim(::Grid{o,d}) where {o,d} = d
 
 "Get unit index in dimension `α`."
-e(g::Grid, α) = CartesianIndex(ntuple(β -> β == α, dim(grid)))
+@inline e(g::Grid, α) = CartesianIndex(ntuple(β -> β == α, dim(g)))
 
 # Extend index periodically so that it stays within the domain.
-(g::Grid)(i::Integer) = mod1(i, g.n)
-(g::Grid)(I::CartesianIndex) = CartesianIndex(mod1.(I.I, g.n))
+@inline (g::Grid)(i::Integer) = mod1(i, g.n)
+@inline (g::Grid)(I::CartesianIndex) = CartesianIndex(mod1.(I.I, g.n))
 
 """
 Problem setup.
