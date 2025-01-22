@@ -25,12 +25,12 @@ end
 "Get physical dimension."
 @inline dim(::Grid{o,d}) where {o,d} = d
 
-"Get unit index in dimension `α`."
-@inline e(g::Grid, α) = CartesianIndex(ntuple(β -> β == α, dim(g)))
+"Get unit index in dimension `i`."
+@inline e(g::Grid, i) = CartesianIndex(ntuple(j -> j == i, dim(g)))
 
 # Extend index periodically so that it stays within the domain.
 @inline (g::Grid)(i::Integer) = mod1(i, g.n)
-@inline (g::Grid)(I::CartesianIndex) = CartesianIndex(mod1.(I.I, g.n))
+@inline (g::Grid)(x::CartesianIndex) = CartesianIndex(mod1.(x.I, g.n))
 
 """
 Problem setup.
