@@ -66,6 +66,8 @@ Disretization orders:
 - [x] Fourth order
 - [x] Sixth order
 
+![Convergence](assets/convergence.png)
+
 Goodies:
 
 - [ ] The velocity gradient and its waste products
