@@ -87,5 +87,5 @@ Differentiability
 Data-generation
 
 - [ ] Add batch dimension and loop over it in kernels (maybe)
-- [ ] Data-consisency: Export commutator errors and sub-filter tensors consisent
+- [ ] Data-consistency: Export commutator errors and sub-filter tensors consistent
     with how they appear in the discrete equations

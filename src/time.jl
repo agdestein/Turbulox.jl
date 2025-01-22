@@ -1,6 +1,6 @@
 # Time stepping
 
-"Deault right-hand side function (without projection)."
+"Default right-hand side function (without projection)."
 function default_right_hand_side!(du, u, setup)
     fill!(du, 0)
     apply!(convectiondiffusion!, setup, du, u, setup.visc)
