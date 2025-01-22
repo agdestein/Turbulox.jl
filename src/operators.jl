@@ -21,22 +21,36 @@ end
     g.n * (u[x+(i!=j)*e(g, j)|>g, i] - u[x-(i==j)*e(g, j)|>g, i])
 @inline δ3(g::Grid, u, x, i, j) =
     g.n * (u[x+(1+(i!=j))*e(g, j)|>g, i] - u[x-(1+(i==j))*e(g, j)|>g, i]) / 3
+@inline δ5(g::Grid, u, x, i, j) =
+    g.n * (u[x+(2+(i!=j))*e(g, j)|>g, i] - u[x-(2+(i==j))*e(g, j)|>g, i]) / 5
 @inline δ(g::Grid{2}, u, x, i, j) = δ1(g, u, x, i, j)
-@inline δ(g::Grid{4}, u, x, i, j) = 9 * δ1(g, u, x, i, j) / 8 - δ3(g, u, x, i, j) / 8
+@inline δ(g::Grid{4}, u, x, i, j) = 9 // 8 * δ1(g, u, x, i, j) - 1 // 8 * δ3(g, u, x, i, j)
+@inline δ(g::Grid{6}, u, x, i, j) =
+    150 // 128 * δ1(g, u, x, i, j) - 25 // 128 * δ3(g, u, x, i, j) +
+    3 // 128 * δ5(g, u, x, i, j)
 
 # Scalar field gradient δp / δx[j].
 @inline δ1(g::Grid, p, x, j) = g.n * (p[x+e(g, j)|>g] - p[x])
 @inline δ3(g::Grid, p, x, j) = g.n * (p[x+2*e(g, j)|>g] - p[x-1e(g, j)|>g]) / 3
+@inline δ5(g::Grid, p, x, j) = g.n * (p[x+3*e(g, j)|>g] - p[x-2e(g, j)|>g]) / 5
 @inline δ(g::Grid{2}, p, x, j) = δ1(g, p, x, j)
-@inline δ(g::Grid{4}, p, x, j) = 9 * δ1(g, p, x, j) / 8 - δ3(g, p, x, j) / 8
+@inline δ(g::Grid{4}, p, x, j) = 9 // 8 * δ1(g, p, x, j) - 1 // 8 * δ3(g, p, x, j)
+@inline δ(g::Grid{6}, p, x, j) =
+    150 // 128 * δ1(g, p, x, j) - 25 // 128 * δ3(g, p, x, j) + 3 // 128 * δ5(g, p, x, j)
 
 # Interpolate u[i] in direction j. Land in canonical position at x.
 @inline pol1(g::Grid, u, x, i, j) =
     (u[x-(i==j)*e(g, j)|>g, i] + u[x+(i!=j)*e(g, j)|>g, i]) / 2
 @inline pol3(g::Grid, u, x, i, j) =
-    (u[x-(1+(i==j))*e(g, j)|>g, i] + u[x+(2-(i==j))*e(g, j)|>g, i]) / 2
+    (u[x-(1+(i==j))*e(g, j)|>g, i] + u[x+(1+(i!=j))*e(g, j)|>g, i]) / 2
+@inline pol5(g::Grid, u, x, i, j) =
+    (u[x-(2+(i==j))*e(g, j)|>g, i] + u[x+(2+(i!=j))*e(g, j)|>g, i]) / 2
 @inline pol(g::Grid{2}, u, x, i, j) = pol1(g, u, x, i, j)
-@inline pol(g::Grid{4}, u, x, i, j) = 9 * pol1(g, u, x, i, j) / 8 - pol3(g, u, x, i, j) / 8
+@inline pol(g::Grid{4}, u, x, i, j) =
+    9 // 8 * pol1(g, u, x, i, j) - 1 // 8 * pol3(g, u, x, i, j)
+@inline pol(g::Grid{6}, u, x, i, j) =
+    150 // 128 * pol1(g, u, x, i, j) - 25 // 128 * pol3(g, u, x, i, j) +
+    3 // 128 * pol5(g, u, x, i, j)
 
 """
 Compute divergence of vector field `u`.
@@ -99,7 +113,48 @@ end
 
     # Divergence of tensor: Lands at canonical position of ui in volume x
     # see  Morinishi 1998 eq. (101)
-    g.n * (9 * (ui_uj_b - ui_uj_a) / 8 - (ui_uj_bb - ui_uj_aa) / 3 / 8)
+    g.n * (9 // 8 * (ui_uj_b - ui_uj_a) - 1 // 8 * (ui_uj_bb - ui_uj_aa) / 3)
+end
+
+@inline function convterm(g::Grid{6}, u, x, i, j)
+    ei, ej = e(g, i), e(g, j)
+
+    # (a)(a)a: (thrice) (twice) left in xj
+    # (b)(b)b: (thrice) (twice) right in xj
+    # 1: second order
+    # 3: fourth order
+    # 5: sixth order
+
+    # ui interpolated in direction xj
+    ui_xj_1_a = pol1(g, u, x - (i != j) * ej |> g, i, j)
+    ui_xj_1_b = pol1(g, u, x + (i == j) * ej |> g, i, j)
+    ui_xj_3_aa = pol3(g, u, x - (1 + (i != j)) * ej |> g, i, j)
+    ui_xj_3_bb = pol3(g, u, x + (1 + (i == j)) * ej |> g, i, j)
+    ui_xj_5_aaa = pol5(g, u, x - (2 + (i != j)) * ej |> g, i, j)
+    ui_xj_5_bbb = pol5(g, u, x + (2 + (i == j)) * ej |> g, i, j)
+
+    # uj interpolated in direction xi
+    uj_xi_aaa = pol(g, u, x - (2 + (i != j)) * ej |> g, j, i)
+    uj_xi_aa = pol(g, u, x - (1 + (i != j)) * ej |> g, j, i)
+    uj_xi_a = pol(g, u, x - (i != j) * ej |> g, j, i)
+    uj_xi_b = pol(g, u, x + (i == j) * ej |> g, j, i)
+    uj_xi_bb = pol(g, u, x + (1 + (i == j)) * ej |> g, j, i)
+    uj_xi_bbb = pol(g, u, x + (2 + (i == j)) * ej |> g, j, i)
+
+    # Tensor product -- see  Morinishi 1998 eq. (112)
+    ui_uj_aaa = ui_xj_5_aaa * uj_xi_aaa
+    ui_uj_aa = ui_xj_3_aa * uj_xi_aa
+    ui_uj_a = ui_xj_1_a * uj_xi_a
+    ui_uj_b = ui_xj_1_b * uj_xi_b
+    ui_uj_bb = ui_xj_3_bb * uj_xi_bb
+    ui_uj_bbb = ui_xj_5_bbb * uj_xi_bbb
+
+    # Divergence of tensor: Lands at canonical position of ui in volume x
+    # see  Morinishi 1998 eq. (112)
+    g.n * (
+        150 // 128 * (ui_uj_b - ui_uj_a) - 25 // 128 * (ui_uj_bb - ui_uj_aa) / 3 +
+        3 // 128 * (ui_uj_bbb - ui_uj_aaa) / 5
+    )
 end
 
 diffusionterm(g::Grid{2}, u, x, i, j) =
@@ -110,6 +165,28 @@ function diffusionterm(g::Grid{4}, u, x, i, j)
     diff = zero(eltype(u))
     @unroll for k = 1:7
         diff += stencil[k] * u[x+(k-4)*e(g, j)|>g, i]
+    end
+    diff
+end
+
+function diffusionterm(g::Grid{6}, u, x, i, j)
+    stencil =
+        (
+            81,
+            -2250,
+            56125,
+            -603000,
+            5627250,
+            -10156412,
+            5627250,
+            -603000,
+            56125,
+            -2250,
+            81,
+        ) ./ 1920^2 .* g.n^2 .|> eltype(u)
+    diff = zero(eltype(u))
+    @unroll for k = 1:length(stencil)
+        diff += stencil[k] * u[x+(k-6)*e(g, j)|>g, i]
     end
     diff
 end
@@ -136,6 +213,9 @@ end
 
 laplace_stencil(g::Grid{2}) = [1, -2, 1] * g.n^2
 laplace_stencil(g::Grid{4}) = [1, -54, 783, -1460, 783, -54, 1] / 576 * g.n^2
+laplace_stencil(g::Grid{6}) =
+    [81, -2250, 56125, -603000, 5627250, -10156412, 5627250, -603000, 56125, -2250, 81] /
+    1920^2 * g.n^2
 
 "Create spectral Poisson solver from setup."
 function poissonsolver(setup)
@@ -148,7 +228,7 @@ function poissonsolver(setup)
     kmax = ntuple(i -> i == 1 ? div(n, 2) + 1 : n, d)
 
     # Discrete Laplacian stencil -- pad with zeros to full size
-    a_cpu = laplace_stencil(grid)
+    a_cpu = laplace_stencil(grid) .|> T
     a_cpu = vcat(a_cpu, zeros(T, n - length(a_cpu)))
     a = adapt(backend, a_cpu)
 

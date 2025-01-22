@@ -64,7 +64,7 @@ Disretization orders:
 
 - [x] Second order
 - [x] Fourth order
-- [ ] Sixth order
+- [x] Sixth order
 
 Goodies:
 
