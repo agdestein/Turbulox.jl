@@ -99,7 +99,7 @@ end
 
     # Divergence of tensor: Lands at canonical position of ui in volume x
     # see  Morinishi 1998 eq. (101)
-    g.n * 9 * (ui_uj_b - ui_uj_a) / 8 - (ui_uj_bb - ui_uj_aa) / 3 / 8
+    g.n * (9 * (ui_uj_b - ui_uj_a) / 8 - (ui_uj_bb - ui_uj_aa) / 3 / 8)
 end
 
 diffusionterm(g::Grid{2}, u, x, i, j) =
@@ -135,7 +135,6 @@ convectiondiffusion!
 end
 
 laplace_stencil(g::Grid{2}) = [1, -2, 1] * g.n^2
-# laplace_stencil(g::Grid{4}) = [1, -18, 99, -164, 99, -18, 1] / 64 * g.n^2
 laplace_stencil(g::Grid{4}) = [1, -54, 783, -1460, 783, -54, 1] / 576 * g.n^2
 
 "Create spectral Poisson solver from setup."
