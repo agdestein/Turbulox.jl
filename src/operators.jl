@@ -309,3 +309,57 @@ end
     δu2_δx1 = δ(g, u, x, 2, 1)
     ω[x] = -δu1_δx2 + δu2_δx1
 end
+
+"""
+Get the following dimensional scale numbers [Pope2000](@cite):
+
+- Velocity ``u_\\text{avg} = \\langle u_i u_i \\rangle^{1/2}``
+- Dissipation rate ``\\epsilon = 2 \\nu \\langle S_{ij} S_{ij} \\rangle``
+- Kolmolgorov length scale ``\\eta = (\\frac{\\nu^3}{\\epsilon})^{1/4}``
+- Taylor length scale ``\\lambda = (\\frac{5 \\nu}{\\epsilon})^{1/2} u_\\text{avg}``
+- Taylor-scale Reynolds number ``Re_\\lambda = \\frac{\\lambda u_\\text{avg}}{\\sqrt{3} \\nu}``
+- Integral length scale ``L = \\frac{3 \\pi}{2 u_\\text{avg}^2} \\int_0^\\infty \\frac{E(k)}{k} \\, \\mathrm{d} k``
+- Large-eddy turnover time ``\\tau = \\frac{L}{u_\\text{avg}}``
+"""
+function get_scale_numbers(u, setup)
+    (; grid, visc) = setup
+    (; n) = grid
+    d = dim(grid)
+    T = eltype(u)
+    uavg = sqrt(sum(abs2, u) / length(u))
+    ϵ_field = scalarfield(setup)
+    apply!(dissipation!, setup, ϵ_field, u, setup.visc)
+    ϵ = sum(ϵ_field) / length(ϵ_field)
+    eta = (visc^3 / ϵ)^T(1 / 4)
+    λ = sqrt(5 * visc / ϵ) * uavg
+    L = let
+        K = div(n, 2)
+        uhat = fft(u, 1:d)
+        uhat = uhat[ntuple(i -> 1:K, d)..., :]
+        e = abs2.(uhat) ./ (2 * (n^d)^2)
+        if d == 2
+            kx = reshape(0:K-1, :)
+            ky = reshape(0:K-1, 1, :)
+            @. e = e / sqrt(kx^2 + ky^2)
+        else
+            kx = reshape(0:K-1, :)
+            ky = reshape(0:K-1, 1, :)
+            kz = reshape(0:K-1, 1, 1, :)
+            @. e = e / sqrt(kx^2 + ky^2 + kz^2)
+        end
+        e = sum(e; dims = d + 1)
+        # Remove k=(0,...,0) component
+        # Note use of singleton range 1:1 instead of scalar index 1
+        # (otherwise CUDA gets annoyed)
+        e[1:1] .= 0
+        T(3π) / 2 / uavg^2 * sum(e)
+    end
+    t_int = L / uavg
+    t_tay = λ / uavg
+    t_kol = eta / uavg
+    Re_int = L * uavg / visc
+    Re_tay = λ * uavg / sqrt(T(3)) / visc
+    Re_kol = eta * uavg / sqrt(T(3)) / visc
+    (; uavg, ϵ, L, λ, eta, t_int, t_tay, t_kol, Re_int, Re_tay, Re_kol)
+end
+
