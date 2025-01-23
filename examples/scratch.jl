@@ -8,7 +8,7 @@ using Random
 using CUDA
 using GLMakie
 
-grid = Turbulox.Grid(; order = 2, dim = 2, n = 512);
+grid = Turbulox.Grid(; order = 8, dim = 2, n = 128);
 setup = Turbulox.problem_setup(;
     grid,
     visc = 1 / 6000,
@@ -23,6 +23,8 @@ cache = (;
 u = Turbulox.vectorfield(setup);
 randn!(u);
 u .*= 10;
+
+solver!.ahat.contents[1] / grid.n^2
 
 force = copy(u);
 # closure! = Turbulox.smagorinsky_model(setup, 0.1, 0.02)
@@ -39,9 +41,10 @@ p = Turbulox.scalarfield(setup);
 Turbulox.apply!(Turbulox.divergence!, setup, p, u)
 p
 
-u = copy(u)
-Turbulox.project!(u, p, solver!, setup)
+Turbulox.project!(u, p, solver!, setup);
 u
+
+u[:, :, 1] |> Array |> heatmap
 
 f = zero(u);
 Turbulox.apply!(Turbulox.convectiondiffusion!, setup, f, u, setup.visc)
@@ -61,14 +64,14 @@ closure! = Turbulox.clark_model(setup, 0.01)
 function rhs!(du, u, setup)
     fill!(du, 0)
     Turbulox.apply!(Turbulox.convectiondiffusion!, setup, du, u, setup.visc)
-    closure!(du, u)
+    # closure!(du, u)
 end
 
 for i = 1:5000
     Δt = 0.4 * Turbulox.propose_timestep(u, setup)
     Turbulox.timestep!(rhs!, u, cache, Δt, solver!, setup)
     @show Δt
-    if i % 20 == 0
+    if i % 10 == 0
         Turbulox.apply!(Turbulox.vorticity!, setup, ω, u)
         vort[] = copyto!(ω_cpu, ω)
         sleep(0.01)

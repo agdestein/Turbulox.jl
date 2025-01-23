@@ -7,7 +7,7 @@ using Turbulox
 using Random
 using CUDA
 using LinearAlgebra
-using WGLMakie
+using GLMakie
 using CairoMakie
 using KernelAbstractions
 using JLD2
@@ -79,13 +79,27 @@ tmax = T(0.5)
 b2 = map(n -> bench(; order = 2, n, tmax), [16, 32, 64, 128, 256, 512, 1024])
 b4 = map(n -> bench(; order = 4, n, tmax), [16, 32, 64, 128, 256, 512])
 b6 = map(n -> bench(; order = 6, n, tmax), [16, 32, 64, 128, 256])
+b8 = map(n -> bench(; order = 8, n, tmax), [16, 32, 64, 128])
 
-jldsave("output/convergence_backend=$(backend)_threads=$(Threads.nthreads()).jld2"; b2, b4, b6)
+# jldsave(
+#     "output/convergence_backend=$(backend)_threads=$(Threads.nthreads()).jld2";
+#     b2,
+#     b4,
+#     b6,
+#     b8,
+# )
+# b2, b4, b6, b8 = load(
+#     "output/convergence_backend=$(backend)_threads=$(Threads.nthreads()).jld2",
+#     "b2",
+#     "b4",
+#     "b6",
+#     "b8",
+# )
 
 using CairoMakie
 
 CairoMakie.activate!()
-WGLMakie.activate!()
+GLMakie.activate!()
 
 # Plot timing vs error
 fig = let
@@ -97,12 +111,37 @@ fig = let
         xscale = log10,
         yscale = log10,
     )
-    scatterlines!(ax, map(b -> Point2f(b.timing, b.err), b2), label = "Order 2")
-    scatterlines!(ax, map(b -> Point2f(b.timing, b.err), b4), label = "Order 4")
-    scatterlines!(ax, map(b -> Point2f(b.timing, b.err), b6), label = "Order 6")
+    for (b, marker, order) in
+        [(b2, :circle, 2), (b4, :utriangle, 4), (b6, :rect, 6), (b8, :diamond, 8)]
+        scatterlines!(ax, map(b -> Point2f(b.timing, b.err), b); marker, label = "Order $order")
+    end
     axislegend(ax)
     save("output/timing_vs_error_backend=$(backend)_threads=$(Threads.nthreads()).pdf", fig)
     fig
+end
+
+# Lower triangle
+function lowertriangle!(ax, xref, yref, order; width = 2)
+    x = xref / sqrt(width), xref * sqrt(width)
+    y = yref / sqrt(width)^order, yref * sqrt(width)^order
+    a = Point2f(x[1], y[2])
+    b = Point2f(x[2], y[1])
+    c = Point2f(x[1], y[1])
+    lines!(ax, [a, b, c, a]; color = :black)
+    text!(ax, "$order"; position = Point2f(0.9 * x[1], 0.6 * yref))
+    text!(ax, "1"; position = Point2f(0.95 * xref, 0.2 * y[1]))
+end
+
+# Upper triangle
+function uppertriangle!(ax, xref, yref, order; width = 2)
+    x = xref / sqrt(width), xref * sqrt(width)
+    y = yref / sqrt(width)^order, yref * sqrt(width)^order
+    a = Point2f(x[1], y[2])
+    b = Point2f(x[2], y[1])
+    c = Point2f(x[2], y[2])
+    lines!(ax, [a, b, c, a]; color = :black)
+    text!(ax, "$order"; position = Point2f(x[2] / 0.9, yref * 0.6))
+    text!(ax, "1"; position = Point2f(xref / 0.95, y[1] / 0.2))
 end
 
 # Plot grid size vs error
@@ -110,42 +149,20 @@ fig = let
     fig = Figure()
     ax = Axis(
         fig[1, 1];
-        xlabel = "n",
+        xlabel = "Resolution",
         ylabel = "Relative error",
         xscale = log10,
         yscale = log10,
         xticks = map(b -> b.n, b2),
     )
-    scatterlines!(ax, map(b -> Point2f(b.n, b.err), b2); label = "Order 2")
-    scatterlines!(ax, map(b -> Point2f(b.n, b.err), b4); label = "Order 4")
-    scatterlines!(ax, map(b -> Point2f(b.n, b.err), b6); label = "Order 6")
+    for (b, marker, order) in
+        [(b2, :circle, 2), (b4, :utriangle, 4), (b6, :rect, 6), (b8, :diamond, 8)]
+        scatterlines!(ax, map(b -> Point2f(b.n, b.err), b); marker, label = "Order $order")
+    end
     ylims!(ax, (3e-16, 1e-3))
-
-    # Lower triangle
-    nref = b6[3].n
-    eref = b6[3].err / 5
-    x = nref / sqrt(2), nref * sqrt(2)
-    y = eref / sqrt(2)^6, eref * sqrt(2)^6
-    a = Point2f(x[1], y[2])
-    b = Point2f(x[2], y[1])
-    c = Point2f(x[1], y[1])
-    lines!(ax, [a, b, c, a]; color = :black)
-    text!(ax, "6"; position = Point2f(0.9 * x[1], 0.6 * eref))
-    text!(ax, "1"; position = Point2f(0.95 * nref, 0.2 * y[1]))
-
-    # Upper triangle
-    nref = b2[4].n
-    eref = b2[4].err * 5
-    x = nref / sqrt(2), nref * sqrt(2)
-    y = eref / sqrt(2)^2, eref * sqrt(2)^2
-    a = Point2f(x[1], y[2])
-    b = Point2f(x[2], y[1])
-    c = Point2f(x[2], y[2])
-    lines!(ax, [a, b, c, a]; color = :black)
-    text!(ax, "2"; position = Point2f(x[2] / 0.9, eref * 0.6))
-    text!(ax, "1"; position = Point2f(nref / 0.95, y[1] / 0.2))
-
-    axislegend(ax; position = :lb)
+    uppertriangle!(ax, b2[4].n, b2[4].err * 5, 2)
+    lowertriangle!(ax, b8[2].n, b8[2].err / 5, 8)
+    axislegend(ax; position = :rb)
     save("output/convergence_backend=$(backend)_threads=$(Threads.nthreads()).pdf", fig)
     fig
 end
