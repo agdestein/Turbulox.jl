@@ -65,19 +65,23 @@ Disretization orders:
 - [x] Second order
 - [x] Fourth order
 - [x] Sixth order
+- [x] Eight order
 
 ![Convergence](assets/convergence.png)
+![Timing](assets/timing.png)
 
 Goodies:
 
-- [ ] The velocity gradient and its waste products
-    - [ ] Invariants
-    - [ ] Turbulence statistics and scale numbers
+- [x] The velocity gradient and its waste products
+    - [x] Invariants
+    - [x] Turbulence statistics and scale numbers
 - [ ] Spectra
 
 Closure models:
 
 - [ ] All the classics
+    - [x] Smagorinsky
+    - [x] Gradient model
 - [ ] Nice interface for plugging in new ones
 
 Differentiability
