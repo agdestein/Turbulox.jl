@@ -1,107 +1,186 @@
-@inline function ∂x(u, I::CartesianIndex{d}, α, β, n) where {d}
-    per = periodicindex(n)
-    e = unitindices(Val(d))
-    eα, eβ = e[α], e[β]
-    if α == β
-        n * (u[I, α] - u[I-eβ|>per, α])
+@inline function δ_collocated(g::Grid, u, x, i, j)
+    ei, ej = e(g, i), e(g, j)
+    if i == j
+        δ(g, u, x, i, j)
     else
-        n * (
-            (u[I+eβ|>per, α] - u[I, α]) +
-            (u[I-eα+eβ|>per, α] - u[I-eα|>per, α]) +
-            (u[I, α] - u[I-eβ|>per, α]) +
-            (u[I-eα|>per, α] - u[I-eα-eβ|>per, α])
+        (
+            δ(g, u, x, i, j) +
+            δ(g, u, x - ej, i, j) +
+            δ(g, u, x - ei, i, j) +
+            δ(g, u, x - ei - ej, i, j)
         ) / 4
     end
 end
 
-@inline ∇(u, I::CartesianIndex{2}, n) = SMatrix{2,2,eltype(u),4}(
-    ∂x(u, I, 1, 1, n),
-    ∂x(u, I, 2, 1, n),
-    ∂x(u, I, 1, 2, n),
-    ∂x(u, I, 2, 2, n),
+@inline ∇_collocated(g::Grid, u, x::CartesianIndex{2}) = SMatrix{2,2,eltype(u),4}(
+    δ_collocated(g, u, x, 1, 1),
+    δ_collocated(g, u, x, 2, 1),
+    δ_collocated(g, u, x, 1, 2),
+    δ_collocated(g, u, x, 2, 2),
 )
-@inline ∇(u, I::CartesianIndex{3}, n) = SMatrix{3,3,eltype(u),9}(
-    ∂x(u, I, 1, 1, n),
-    ∂x(u, I, 2, 1, n),
-    ∂x(u, I, 3, 1, n),
-    ∂x(u, I, 1, 2, n),
-    ∂x(u, I, 2, 2, n),
-    ∂x(u, I, 3, 2, n),
-    ∂x(u, I, 1, 3, n),
-    ∂x(u, I, 2, 3, n),
-    ∂x(u, I, 3, 3, n),
+@inline ∇_collocated(g::Grid, u, x::CartesianIndex{3}) = SMatrix{3,3,eltype(u),9}(
+    δ_collocated(g, u, x, 1, 1),
+    δ_collocated(g, u, x, 2, 1),
+    δ_collocated(g, u, x, 3, 1),
+    δ_collocated(g, u, x, 1, 2),
+    δ_collocated(g, u, x, 2, 2),
+    δ_collocated(g, u, x, 3, 2),
+    δ_collocated(g, u, x, 1, 3),
+    δ_collocated(g, u, x, 2, 3),
+    δ_collocated(g, u, x, 3, 3),
 )
 
-@inline idtensor(::CartesianIndex{2}) = SMatrix{2,2,Bool,4}(1, 0, 0, 1)
-@inline idtensor(::CartesianIndex{3}) = SMatrix{3,3,Bool,9}(1, 0, 0, 0, 1, 0, 0, 0, 1)
+@inline idtensor(::Grid{o,2}) where {o} = SMatrix{2,2,Bool,4}(1, 0, 0, 1)
+@inline idtensor(::Grid{o,3}) where {o} = SMatrix{3,3,Bool,9}(1, 0, 0, 0, 1, 0, 0, 0, 1)
 
-@inline unittensor(::CartesianIndex{2}, α, β) =
-    SVector(α == 1, α == 2) * SVector(β == 1, β == 2)'
-@inline unittensor(::CartesianIndex{3}, α, β) =
-    SVector(α == 1, α == 2, α == 3) * SVector(β == 1, β == 2, β == 3)'
+@inline unittensor(g::Grid, i, j) =
+    SVector(ntuple(k -> i == k, dim(g))) * SVector(ntuple(k -> j == k, dim(g)))
 
-@kernel function velocitygradient!(setup, ∇u, u)
-    (; D, n) = setup
-    I = @index(Global, Cartesian)
-    ∇u[I] = ∇(u, I, n)
-end
-
-@kernel function tensorproduct!(setup, uv, u, v)
-    (; D, n) = setup
-    per = periodicindex(n)
-    if getval(D) == 2
-        i, j = @index(Global, Cartesian)
-        uvec = SVector(
-            (u[i, j, 1] + u[i-1|>per, j, 1]) / 2,
-            (u[i, j, 2] + u[i, j-1|>per, 2]) / 2,
-        )
-        vvec = SVector(
-            (v[i, j, 1] + v[i-1|>per, j, 1]) / 2,
-            (v[i, j, 2] + v[i, j-1|>per, 2]) / 2,
-        )
-        uv[i, j] = uvec * vvec'
-    else
-        i, j, k = @index(Global, Cartesian)
-        uvec = SVector(
-            (u[i, j, k, 1] + u[i-1|>per, j, k, 1]) / 2,
-            (u[i, j, k, 2] + u[i, j-1|>per, k, 2]) / 2,
-            (u[i, j, k, 3] + u[i, j, k-1|>per, 3]) / 2,
-        )
-        vvec = SVector(
-            (v[i, j, k, 1] + v[i-1|>per, j, k, 1]) / 2,
-            (v[i, j, k, 2] + v[i, j-1|>per, k, 2]) / 2,
-            (v[i, j, k, 3] + v[i, j, k-1|>per, 3]) / 2,
-        )
-        uv[i, j, k] = uvec * vvec'
+@kernel function velocitygradient!(grid, ∇u, u)
+    x = @index(Global, Cartesian)
+    dims = 1:dim(grid)
+    @unroll for i in dims
+        @unroll for j in dims
+            ∇u[x, i, j] = δ(grid, u, x, i, j)
+        end
     end
 end
 
-@kernel function tensorbasis!(setup, B, V, ∇u)
-    I = @index(Global, Cartesian)
-    S = (∇u[I] + ∇u[I]') / 2
-    R = (∇u[I] - ∇u[I]') / 2
-    if getval(D) == 2
-        B[I, 1] = idtensor(I)
-        B[I, 2] = S
-        B[I, 3] = S * R - R * S
-        V[I, 1] = dot(S, S)
-        V[I, 2] = dot(R, R)
+@kernel function velocitygradient_collocated!(grid, ∇u, u)
+    x = @index(Global, Cartesian)
+    ∇u[x] = ∇_collocated(grid, u, x)
+end
+
+@kernel function tensorproduct!(grid, uv, u, v)
+    (; n) = grid
+    if dim(grid) == 2
+        x, y = @index(Global, NTuple)
+        uvec =
+            SVector((u[x, y, 1] + u[x-1|>g, y, 1]) / 2, (u[x, y, 2] + u[x, y-1|>g, 2]) / 2)
+        vvec =
+            SVector((v[x, y, 1] + v[x-1|>g, y, 1]) / 2, (v[x, y, 2] + v[x, y-1|>g, 2]) / 2)
+        uv[x, y] = uvec * vvec'
     else
-        B[I, 1] = idtensor(I)
-        B[I, 2] = S
-        B[I, 3] = S * R - R * S
-        B[I, 4] = S * S
-        B[I, 5] = R * R
-        B[I, 6] = S * S * R - R * S * S
-        B[I, 7] = S * R * R + R * R * S
-        B[I, 8] = R * S * R * R - R * R * S * R
-        B[I, 9] = S * R * S * S - S * S * R * S
-        B[I, 10] = S * S * R * R + R * R * S * S
-        B[I, 11] = R * S * S * R * R - R * R * S * S * R
-        V[I, 1] = tr(S * S)
-        V[I, 2] = tr(R * R)
-        V[I, 3] = tr(S * S * S)
-        V[I, 4] = tr(S * R * R)
-        V[I, 5] = tr(S * S * R * R)
+        x, y, z = @index(Global, NTuple)
+        uvec = SVector(
+            (u[x, y, z, 1] + u[x-1|>g, y, z, 1]) / 2,
+            (u[x, y, z, 2] + u[x, y-1|>g, z, 2]) / 2,
+            (u[x, y, z, 3] + u[x, y, z-1|>g, 3]) / 2,
+        )
+        vvec = SVector(
+            (v[x, y, z, 1] + v[x-1|>g, y, z, 1]) / 2,
+            (v[x, y, z, 2] + v[x, y-1|>g, z, 2]) / 2,
+            (v[x, y, z, 3] + v[x, y, z-1|>g, 3]) / 2,
+        )
+        uv[x, y, z] = uvec * vvec'
+    end
+end
+
+@kernel function dissipation!(grid, ϵ, u, visc)
+    x = @index(Global, Cartesian)
+    ∇u = ∇_collocated(grid, u, x)
+    S = (∇u + ∇u') / 2
+    ϵ[x] = 2 * visc * dot(S, S)
+end
+
+@kernel function tensorbasis!(grid, B, V, ∇u)
+    x = @index(Global, Cartesian)
+    S = (∇u[x] + ∇u[x]') / 2
+    R = (∇u[x] - ∇u[x]') / 2
+    if dim(grid) == 2
+        B[x, 1] = idtensor(grid)
+        B[x, 2] = S
+        B[x, 3] = S * R - R * S
+        V[x, 1] = dot(S, S)
+        V[x, 2] = dot(R, R)
+    else
+        B[x, 1] = idtensor(grid)
+        B[x, 2] = S
+        B[x, 3] = S * R - R * S
+        B[x, 4] = S * S
+        B[x, 5] = R * R
+        B[x, 6] = S * S * R - R * S * S
+        B[x, 7] = S * R * R + R * R * S
+        B[x, 8] = R * S * R * R - R * R * S * R
+        B[x, 9] = S * R * S * S - S * S * R * S
+        B[x, 10] = S * S * R * R + R * R * S * S
+        B[x, 11] = R * S * S * R * R - R * R * S * S * R
+        V[x, 1] = tr(S * S)
+        V[x, 2] = tr(R * R)
+        V[x, 3] = tr(S * S * S)
+        V[x, 4] = tr(S * R * R)
+        V[x, 5] = tr(S * S * R * R)
+    end
+end
+
+@kernel function strain!(grid, S, u)
+    x = @index(Global, Cartesian)
+    @unroll for i = 1:dim(grid)
+        @unroll for j = 1:dim(grid)
+            Aij = δ(grid, u, x, i, j)
+            Aji = δ(grid, u, x, j, i)
+            S[x, i, j] = (Aij + Aji) / 2
+        end
+    end
+end
+
+@kernel function compute_qr!(grid, q, r, ∇u)
+    x = @index(Global, Cartesian)
+    A = ∇u[x]
+    q[x] = -tr(A * A) / 2
+    r[x] = -tr(A * A * A) / 3
+end
+
+"""
+Divergence of staggered tensor field.
+Add result to existing force field `f`.
+"""
+@kernel function tensordivergence!(g::Grid, f, σ)
+    x = @index(Global, Cartesian)
+    dims = 1:dim(g)
+    @unroll for i in dims
+        div = f[x, i]
+        @unroll for j in dims
+            ei, ej = e(g, i), e(g, j)
+            div += g.n * (σ[x+(i==j)*ej, i, j] - σ[x-(i!=j)*ej, i, j])
+        end
+        f[x, i] = div
+    end
+end
+
+"""
+Divergence of collocated tensor field.
+First interpolate to staggered points.
+Add result to existing force field `f`.
+"""
+@kernel function tensordivergence_collocated!(g::Grid, f, σ)
+    x = @index(Global, Cartesian)
+    dims = 1:dim(g)
+    @unroll for i in dims
+        div = f[x, i]
+        @unroll for j in dims
+            ei, ej = e(g, i), e(g, j)
+            if i == j
+                σa = σ[x][i, j]
+                σb = σ[x+ei|>g][i, j]
+            else
+                σa =
+                    (
+                        σ[x][i, j] +
+                        σ[x-ej|>g][i, j] +
+                        σ[x+ei|>g][i, j] +
+                        σ[x+ei-ej|>g][i, j]
+                    ) / 4
+                σb =
+                    (
+                        σ[x][i, j] +
+                        σ[x+ei+ej|>g][i, j] +
+                        σ[x+ei|>g][i, j] +
+                        σ[x+ej|>g][i, j]
+                    ) / 4
+            end
+            div += g.n * (σb - σa)
+        end
+        f[x, i] = div
     end
 end
