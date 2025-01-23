@@ -50,5 +50,6 @@ include("operators.jl")
 include("tensors.jl")
 include("closures.jl")
 include("time.jl")
+include("filters.jl")
 
 end
