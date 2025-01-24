@@ -7,7 +7,7 @@ using Turbulox
 using Random
 using CUDA
 using LinearAlgebra
-using GLMakie
+using WGLMakie
 using CairoMakie
 using KernelAbstractions
 using JLD2
@@ -76,10 +76,11 @@ function bench(; order, n, tmax)
 end
 
 tmax = T(0.5)
-b2 = map(n -> bench(; order = 2, n, tmax), [16, 32, 64, 128, 256, 512, 1024])
-b4 = map(n -> bench(; order = 4, n, tmax), [16, 32, 64, 128, 256, 512])
-b6 = map(n -> bench(; order = 6, n, tmax), [16, 32, 64, 128, 256])
-b8 = map(n -> bench(; order = 8, n, tmax), [16, 32, 64, 128])
+b2 = map(n -> bench(; order = 2, n, tmax), [4, 8, 16, 32, 64, 128, 256, 512, 1024])
+b4 = map(n -> bench(; order = 4, n, tmax), [4, 8, 16, 32, 64, 128, 256, 512])
+b6 = map(n -> bench(; order = 6, n, tmax), [4, 8, 16, 32, 64, 128, 256])
+b8 = map(n -> bench(; order = 8, n, tmax), [4, 8, 16, 32, 64, 128])
+b10 = map(n -> bench(; order = 10, n, tmax), [4, 8, 16, 32, 64])
 
 # jldsave(
 #     "output/convergence_backend=$(backend)_threads=$(Threads.nthreads()).jld2";
@@ -87,13 +88,15 @@ b8 = map(n -> bench(; order = 8, n, tmax), [16, 32, 64, 128])
 #     b4,
 #     b6,
 #     b8,
+#     b10,
 # )
-# b2, b4, b6, b8 = load(
+# b2, b4, b6, b8, b10 = load(
 #     "output/convergence_backend=$(backend)_threads=$(Threads.nthreads()).jld2",
 #     "b2",
 #     "b4",
 #     "b6",
 #     "b8",
+#     "b10",
 # )
 
 using CairoMakie
@@ -111,11 +114,16 @@ fig = let
         xscale = log10,
         yscale = log10,
     )
-    for (b, marker, order) in
-        [(b2, :circle, 2), (b4, :utriangle, 4), (b6, :rect, 6), (b8, :diamond, 8)]
+    for (b, marker, order) in [
+        (b2, :circle, 2),
+        (b4, :utriangle, 4),
+        (b6, :rect, 6),
+        (b8, :diamond, 8),
+        (b10, :cross, 10),
+    ]
         scatterlines!(ax, map(b -> Point2f(b.timing, b.err), b); marker, label = "Order $order")
     end
-    axislegend(ax)
+    axislegend(ax; position = :lb)
     save("output/timing_vs_error_backend=$(backend)_threads=$(Threads.nthreads()).pdf", fig)
     fig
 end
@@ -128,7 +136,7 @@ function lowertriangle!(ax, xref, yref, order; width = 2)
     b = Point2f(x[2], y[1])
     c = Point2f(x[1], y[1])
     lines!(ax, [a, b, c, a]; color = :black)
-    text!(ax, "$order"; position = Point2f(0.9 * x[1], 0.6 * yref))
+    text!(ax, "$order"; position = Point2f(0.8 * x[1], 0.6 * yref))
     text!(ax, "1"; position = Point2f(0.95 * xref, 0.2 * y[1]))
 end
 
@@ -141,8 +149,10 @@ function uppertriangle!(ax, xref, yref, order; width = 2)
     c = Point2f(x[2], y[2])
     lines!(ax, [a, b, c, a]; color = :black)
     text!(ax, "$order"; position = Point2f(x[2] / 0.9, yref * 0.6))
-    text!(ax, "1"; position = Point2f(xref / 0.95, y[1] / 0.2))
+    text!(ax, "1"; position = Point2f(xref / 0.95, y[1] * 20))
 end
+
+WGLMakie.activate!()
 
 # Plot grid size vs error
 fig = let
@@ -155,14 +165,19 @@ fig = let
         yscale = log10,
         xticks = map(b -> b.n, b2),
     )
-    for (b, marker, order) in
-        [(b2, :circle, 2), (b4, :utriangle, 4), (b6, :rect, 6), (b8, :diamond, 8)]
+    for (b, marker, order) in [
+        (b2, :circle, 2),
+        (b4, :utriangle, 4),
+        (b6, :rect, 6),
+        (b8, :diamond, 8),
+        (b10, :cross, 10),
+    ]
         scatterlines!(ax, map(b -> Point2f(b.n, b.err), b); marker, label = "Order $order")
     end
-    ylims!(ax, (3e-16, 1e-3))
-    uppertriangle!(ax, b2[4].n, b2[4].err * 5, 2)
-    lowertriangle!(ax, b8[2].n, b8[2].err / 5, 8)
-    axislegend(ax; position = :rb)
+    ylims!(ax, (3e-16, 2e-2))
+    uppertriangle!(ax, b2[5].n / sqrt(2), 2 *b2[5].err * 5, 2; width = 4)
+    lowertriangle!(ax, b10[2].n, b10[2].err / 10, 10)
+    axislegend(ax; position = :lb)
     save("output/convergence_backend=$(backend)_threads=$(Threads.nthreads()).pdf", fig)
     fig
 end
