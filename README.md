@@ -65,7 +65,8 @@ Disretization orders:
 - [x] Second order
 - [x] Fourth order
 - [x] Sixth order
-- [x] Eight order
+- [x] Eighth order
+- [x] Tenth order
 
 ![Convergence](assets/convergence.png)
 ![Timing](assets/timing.png)

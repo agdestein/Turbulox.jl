@@ -23,9 +23,12 @@ end
 find_stencil(1) # Second order
 find_stencil(2) # Fourth order
 find_stencil(3) # Sixth order
-find_stencil(4) # Eight order
+find_stencil(4) # Eighth order
+find_stencil(5) # Tenth order
 
 find_laplacian(find_stencil(1))
 find_laplacian(find_stencil(2))
 find_laplacian(find_stencil(3))
 find_laplacian(find_stencil(4))
+find_laplacian(find_stencil(5))
+find_laplacian(find_stencil(5)) * 1.0 .|> x -> round(x, digits = 4)
