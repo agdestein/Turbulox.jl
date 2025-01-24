@@ -75,7 +75,9 @@ Goodies:
 - [x] The velocity gradient and its waste products
     - [x] Invariants
     - [x] Turbulence statistics and scale numbers
-- [ ] Spectra
+- [x] Spectra
+    - [x] Energy
+    - [ ] Reference slope $C_K \epsilon^{2/3} k^{-5/3}$
 
 Closure models:
 
