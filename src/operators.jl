@@ -465,6 +465,16 @@ laplace_stencil(g::Grid{10}) =
         1225 // 86973087744,
     ] * g.n^2
 
+mergestencil(s, n) =
+    if length(s) > n
+        a, b = s[1:n], s[n+1:end]
+        b = mergestencil(b, n)
+        a[1:length(b)] .+= b
+        a
+    else
+        s
+    end
+
 "Create spectral Poisson solver from setup."
 function poissonsolver(setup)
     (; backend, grid, visc) = setup
@@ -477,6 +487,13 @@ function poissonsolver(setup)
 
     # Discrete Laplacian stencil -- pad with zeros to full size
     a_cpu = laplace_stencil(grid) .|> T
+    if length(a_cpu) > n
+        # This is only necessary for convergence plot
+        @warn "Laplacian stencil is longer than grid size. Merging."
+        a_cpu = mergestencil(a_cpu, n)
+    else
+        a_cpu = vcat(a_cpu, zeros(T, n - length(a_cpu)))
+    end
     a_cpu = vcat(a_cpu, zeros(T, n - length(a_cpu)))
     a = adapt(backend, a_cpu)
 
