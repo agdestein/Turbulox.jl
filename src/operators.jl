@@ -89,6 +89,7 @@ end
 
 "Approximate the convective force ``\\partial_j (u_i u_j)``."
 function convterm end
+
 @inline function convterm(g::Grid{2}, u, x, i, j)
     (; n) = g
     ei, ej = e(g, i), e(g, j)
