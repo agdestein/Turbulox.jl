@@ -1,7 +1,10 @@
 using Turbulox
 using Documenter
+using DocumenterCitations
 
 DocMeta.setdocmeta!(Turbulox, :DocTestSetup, :(using Turbulox); recursive = true)
+
+bib = CitationBibliography(joinpath(@__DIR__, "references.bib"))
 
 makedocs(;
     modules = [Turbulox],
@@ -13,6 +16,7 @@ makedocs(;
         assets = String[],
     ),
     pages = ["Home" => "index.md"],
+    plugins = [bib],
 )
 
 deploydocs(; repo = "github.com/agdestein/Turbulox.jl", devbranch = "main")
