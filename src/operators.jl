@@ -576,7 +576,7 @@ end
 end
 
 """
-Get the following dimensional scale numbers [Pope2000](@cite):
+Get the following dimensional scale numbers [popeTurbulentFlows2000](@cite):
 
 - Velocity ``u_\\text{avg} = \\langle u_i u_i \\rangle^{1/2}``
 - Dissipation rate ``\\epsilon = 2 \\nu \\langle S_{ij} S_{ij} \\rangle``
