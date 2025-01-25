@@ -47,7 +47,7 @@ end
 
 "Eddy viscosity closure model."
 function eddyviscosity_model(viscosity!, setup, C, Δ)
-    ∇u = tensorfield_staggered(setup)
+    ∇u = staggered_tensorfield(setup)
     visc = scalarfield(setup)
     function closure!(force, u)
         apply!(velocitygradient!, setup, ∇u, u)
@@ -63,7 +63,7 @@ Proposed value for `C` is 0.17.
 """
 @kernel function smagorinsky_viscosity!(g::Grid, visc, ∇u, C, Δ)
     x = @index(Global, Cartesian)
-    G = interpolate_tensor_collocated(g, ∇u, x)
+    G = pol_tensor_collocated(g, ∇u, x)
     s = if dim(g) == 2
         s11, s22, s12 = G[1, 1], G[2, 2], (G[1, 2] + G[2, 1]) / 2
         sqrt(2s11^2 + 2s22^2 + 4s12^2)
@@ -82,10 +82,10 @@ Proposed value for `C` is 0.28.
 """
 @kernel function vreman_viscosity!(g::Grid, visc, ∇u, C, Δ)
     x = @index(Global, Cartesian)
-    G = interpolate_tensor_collocated(g, ∇u, x)
+    G = pol_tensor_collocated(g, ∇u, x)
     S = (G + G') / 2
     Ω = (G - G') / 2
-    QA = -tr(G * G) / 2
+    QG = -tr(G * G) / 2
     QS = -tr(S * S) / 2
     QΩ = -tr(Ω * Ω) / 2
     V2 = 4 * (tr(S * S * Ω * Ω) − 2 * QS * QΩ)
@@ -100,7 +100,7 @@ Proposed values for `C` are
 """
 @kernel function verstappen_viscosity!(g::Grid, visc, ∇u, C, Δ)
     x = @index(Global, Cartesian)
-    G = interpolate_tensor_collocated(g, ∇u, x)
+    G = pol_tensor_collocated(g, ∇u, x)
     S = (G + G') / 2
     QS = -tr(S * S) / 2
     RS = tr(S * S * S) / 3
@@ -113,7 +113,7 @@ Proposed value for `C` is 1.35.
 """
 @kernel function nicoud_viscosity!(g::Grid, visc, ∇u, C, Δ)
     x = @index(Global, Cartesian)
-    G = interpolate_tensor_collocated(g, ∇u, x)
+    G = pol_tensor_collocated(g, ∇u, x)
     # Note: λ3 ≤ λ2 ≤ λ1
     λ3, λ2, λ1 = eigvals(G * G')
     σ3, σ2, σ1 = sqrt(λ1), sqrt(λ2), sqrt(λ3)
@@ -133,10 +133,16 @@ Proposed values for ``p`` (set `valp = Val(p))`:
     T = eltype(visc)
     p = getval(valp)
     x = @index(Global, Cartesian)
-    G = interpolate_tensor_collocated(g, ∇u, x)
-    # Note: λ3 ≤ λ2 ≤ λ1
-    PGG
-    QGG
-    RGG
+    G = pol_tensor_collocated(g, ∇u, x)
+    S = (G + G') / 2
+    Ω = (G - G') / 2
+    QG = -tr(G * G) / 2
+    QS = -tr(S * S) / 2
+    QΩ = -tr(Ω * Ω) / 2
+    RG = tr(G * G * G) / 3
+    V2 = 4 * (tr(S * S * Ω * Ω) − 2 * QS * QΩ)
+    PGG = 2 * (QΩ − QS)
+    QGG = V2 + QG^2
+    RGG = RG^2
     visc[x] = (C * Δ)^2 * PGG^p * QGG^-(p + 1) * RGG^((p+T(5)/2) / 3)
 end
