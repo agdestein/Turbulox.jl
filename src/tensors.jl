@@ -1,3 +1,23 @@
+"Interpolate staggered tensor to volume centers."
+@inline function pol_tensor_collocated(g::Grid{o,2}, σ, x) where {o}
+    e1, e2 = e(g, 1), e(g, 2)
+    σ11 = σ[x, 1, 1]
+    σ22 = σu[x, 2, 2]
+    σ12 = (σ[x, 1, 2] + σ[x-e1|>g, 1, 2] + σ[x-e2|>g, 1, 2] + σ[x-e1-e2|>g, 1, 2]) / 4
+    σ21 = (σ[x, 2, 1] + σ[x-e1|>g, 2, 1] + σ[x-e2|>g, 2, 1] + σ[x-e1-e2|>g, 2, 1]) / 4
+    SMatrix{2,2,eltype(σ),4}(σ11, σ21, σ12, σ22)
+end
+@inline function pol_tensor_collocated(g::Grid{o,3}, σ, x) where {o}
+    e1, e2, e3 = e(g, 1), e(g, 2), e(g, 3)
+    δ11 = σ[x, 1, 1]
+    δ22 = σ[x, 2, 2]
+    δ33 = σ[x, 3, 3]
+    δ12 = (σ[x, 1, 2] + σ[x-e1|>g, 1, 2] + σ[x-e2|>g, 1, 2] + σ[x-e1-e2|>g, 1, 2]) / 4
+    δ13 = (σ[x, 1, 3] + σ[x-e1|>g, 1, 3] + σ[x-e3|>g, 1, 3] + σ[x-e1-e3|>g, 1, 3]) / 4
+    δ23 = (σ[x, 2, 3] + σ[x-e2|>g, 2, 3] + σ[x-e3|>g, 2, 3] + σ[x-e2-e3|>g, 2, 3]) / 4
+    SMatrix{3,3,eltype(σ),9}(σ11, σ21, σ31, σ12, σ22, σ32, σ13, σ23, σ33)
+end
+
 @inline function δ_collocated(g::Grid, u, x, i, j)
     ei, ej = e(g, i), e(g, j)
     if i == j

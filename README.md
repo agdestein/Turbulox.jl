@@ -84,7 +84,10 @@ Closure models:
 
 - [ ] All the classics
     - [x] Smagorinsky
-    - [x] Gradient model
+    - [x] Gradient model (Clark)
+    - [x] Vreman
+    - [x] Verstappen
+    - [x] $\sigma$-model
 - [ ] Nice interface for plugging in new ones
 
 Differentiability
