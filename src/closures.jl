@@ -36,7 +36,7 @@ Add result to existing force field `f`.
             else
                 nu_a = (visc[x] + visc[x-ej|>g] + visc[x+ei|>g] + visc[x+ei-ej|>g]) / 4
                 nu_b = (visc[x] + visc[x+ei+ej|>g] + visc[x+ei|>g] + visc[x+ej|>g]) / 4
-                s_a = (∇u[x-ej, i, j] + ∇u[x-ej, j, i]) / 2
+                s_a = (∇u[x-ej|>g, i, j] + ∇u[x-ej|>g, j, i]) / 2
                 s_b = (∇u[x, i, j] + ∇u[x, j, i]) / 2
             end
             div += 2 * g.n * (s_b * nu_b - s_a * nu_a)
@@ -116,7 +116,8 @@ Proposed value for `C` is 1.35.
     G = pol_tensor_collocated(g, ∇u, x)
     # Note: λ3 ≤ λ2 ≤ λ1
     λ3, λ2, λ1 = eigvals(G * G')
-    σ3, σ2, σ1 = sqrt(λ1), sqrt(λ2), sqrt(λ3)
+    λ3 = max(λ3, 0) # Might be -eps due to numerical errors
+    σ1, σ2, σ3 = sqrt(λ1), sqrt(λ2), sqrt(λ3)
     visc[x] = (C * Δ)^2 * σ3 * (σ1 - σ2) * (σ2 - σ3) / σ1^2
 end
 
@@ -129,7 +130,7 @@ Proposed values for ``p`` (set `valp = Val(p))`:
 - -1
 - 0
 """
-@kernel function s3pqr_viscosity!(g::Grid, visc, ∇u, C, Δ, valp)
+@kernel function s3pqr_viscosity!(g::Grid, visc, ∇u, (C, valp), Δ)
     T = eltype(visc)
     p = getval(valp)
     x = @index(Global, Cartesian)
