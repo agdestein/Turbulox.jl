@@ -57,7 +57,7 @@ end
 @inline idtensor(::Grid{o,3}) where {o} = SMatrix{3,3,Bool,9}(1, 0, 0, 0, 1, 0, 0, 0, 1)
 
 @inline unittensor(g::Grid, i, j) =
-    SVector(ntuple(k -> i == k, dim(g))) * SVector(ntuple(k -> j == k, dim(g)))
+    SVector(ntuple(k -> i == k, dim(g))) * SVector(ntuple(k -> j == k, dim(g)))'
 
 @kernel function velocitygradient!(grid, ∇u, u)
     x = @index(Global, Cartesian)
