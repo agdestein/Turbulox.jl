@@ -4,6 +4,7 @@ up:
 	julia --project=. -e 'using Pkg; Pkg.update()'
 	julia --project=docs -e 'using Pkg; Pkg.update()'
 	julia --project=test -e 'using Pkg; Pkg.update()'
+	julia --project=examples -e 'using Pkg; Pkg.update()'
 
 .PHONY: docs
 docs:
