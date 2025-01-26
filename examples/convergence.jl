@@ -175,7 +175,7 @@ fig = let
         scatterlines!(ax, map(b -> Point2f(b.n, b.err), b); marker, label = "Order $order")
     end
     ylims!(ax, (3e-16, 2e-2))
-    uppertriangle!(ax, b2[5].n / sqrt(2), 2 *b2[5].err * 5, 2; width = 4)
+    uppertriangle!(ax, b2[5].n / sqrt(2), 2 * b2[5].err * 5, 2; width = 4)
     lowertriangle!(ax, b10[2].n, b10[2].err / 10, 10)
     axislegend(ax; position = :lb)
     save("output/convergence_backend=$(backend)_threads=$(Threads.nthreads()).pdf", fig)

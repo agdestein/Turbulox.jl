@@ -2,18 +2,18 @@
 # Each testitem is wrapped in a module to avoid name conflicts.
 
 module TestRunner
-    macro testitem(name, block)
-        quote
-            @eval module MyTest
-                using Turbulox
-                using Test
-                @testset $name begin
-                    $block
-                end
-            end
-            nothing # Suppress output
+macro testitem(name, block)
+    quote
+        @eval module MyTest
+        using Turbulox
+        using Test
+        @testset $name begin
+            $block
         end
+        end
+        nothing # Suppress output
     end
+end
 end
 
 using REPL

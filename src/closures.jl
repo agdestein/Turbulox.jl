@@ -144,5 +144,5 @@ Proposed values for ``p`` (set `valp = Val(p))`:
     PGG = 2 * (QΩ − QS)
     QGG = V2 + QG^2
     RGG = RG^2
-    visc[x] = (C * Δ)^2 * PGG^p * QGG^-(p + 1) * RGG^((p+T(5)/2) / 3)
+    visc[x] = (C * Δ)^2 * PGG^p * QGG^-(p + 1) * RGG^((p + T(5) / 2) / 3)
 end

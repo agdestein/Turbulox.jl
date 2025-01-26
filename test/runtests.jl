@@ -1,7 +1,7 @@
 if false
     # These are implicitly loaded in `@testitem`s
     include("../src/Turbulox.jl")
-    using .Turbulox 
+    using .Turbulox
     using Test
 end
 
@@ -66,8 +66,8 @@ end
         # Check that the convection operator is skew-symmetric
         # for a divergence-free field
         u = Turbulox.randomfield(setup, solver!) # Divergence-free
-        du = zero(u);
-        Turbulox.apply!(Turbulox.convection!, setup, du, u);
+        du = zero(u)
+        Turbulox.apply!(Turbulox.convection!, setup, du, u)
         dE = dot(u, du) / grid.n^3
         @test abs(dE) < 1e-12
 
@@ -75,15 +75,15 @@ end
         # This is because we use the divergence-form
         # (see Morinishi et al. 1998)
         u = randn(grid.n, grid.n, grid.n, 3) # Non-divergence-free
-        du = zero(u);
-        Turbulox.apply!(Turbulox.convection!, setup, du, u);
+        du = zero(u)
+        Turbulox.apply!(Turbulox.convection!, setup, du, u)
         dE = dot(u, du) / grid.n^3
         @test abs(dE) > 1e-12
 
         # Check that the diffusion operator is dissipative
         u = randn(grid.n, grid.n, grid.n, 3) # Non-divergence-free
-        du = zero(u);
-        Turbulox.apply!(Turbulox.diffusion!, setup, du, u, setup.visc);
+        du = zero(u)
+        Turbulox.apply!(Turbulox.diffusion!, setup, du, u, setup.visc)
         dE = dot(u, du) / grid.n^3
         @test dE < 0
     end
