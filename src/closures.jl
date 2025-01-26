@@ -115,8 +115,7 @@ Proposed value for `C` is 1.35.
     x = @index(Global, Cartesian)
     G = pol_tensor_collocated(g, ∇u, x)
     # Note: λ3 ≤ λ2 ≤ λ1
-    λ3, λ2, λ1 = eigvals(G * G')
-    λ3 = max(λ3, 0) # Might be -eps due to numerical errors
+    λ3, λ2, λ1 = G * G' |> Symmetric |> eigvals
     σ1, σ2, σ3 = sqrt(λ1), sqrt(λ2), sqrt(λ3)
     visc[x] = (C * Δ)^2 * σ3 * (σ1 - σ2) * (σ2 - σ3) / σ1^2
 end
