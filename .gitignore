@@ -4,3 +4,5 @@
 *Manifest.toml
 /output/
 /docs/build/
+*.nsys-rep
+*.sqlite
