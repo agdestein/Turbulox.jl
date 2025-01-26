@@ -8,6 +8,8 @@
 
 Turbulence in a box.
 
+https://github.com/user-attachments/assets/74ba86ac-cd78-49e1-ae14-87705c0b044c
+
 ## 🚀 Installation
 
 This package is in active development, and breaking changes are expected.
