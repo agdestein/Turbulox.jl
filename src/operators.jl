@@ -349,13 +349,39 @@ Add the force field to `f`.
 convectiondiffusion!
 
 @kernel inbounds = true function convectiondiffusion!(g::Grid, f, u, visc)
-    T = typeof(visc)
+    T = eltype(u)
     dims = 1:dim(g)
     x = @index(Global, Cartesian)
     @unroll for i in dims
         fxi = f[x, i]
         @unroll for j in dims
             fxi -= convterm(g, u, x, i, j)
+            fxi += visc * diffusionterm(g, u, x, i, j)
+        end
+        f[x, i] = fxi
+    end
+end
+
+@kernel function convection!(g::Grid, f, u)
+    T = eltype(u)
+    dims = 1:dim(g)
+    x = @index(Global, Cartesian)
+    @unroll for i in dims
+        fxi = f[x, i]
+        @unroll for j in dims
+            fxi -= convterm(g, u, x, i, j)
+        end
+        f[x, i] = fxi
+    end
+end
+
+@kernel function diffusion!(g::Grid, f, u, visc)
+    T = eltype(u)
+    dims = 1:dim(g)
+    x = @index(Global, Cartesian)
+    @unroll for i in dims
+        fxi = f[x, i]
+        @unroll for j in dims
             fxi += visc * diffusionterm(g, u, x, i, j)
         end
         f[x, i] = fxi
