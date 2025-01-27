@@ -127,7 +127,7 @@ function create_spectrum(; setup, kp, rng = Random.default_rng())
     stack(uhat)
 end
 
-function randomfield(setup, solver!, A = 1, kp = 10, rng = Random.default_rng())
+function randomfield(setup, solver!; A = 1, kp = 10, rng = Random.default_rng())
     (; grid) = setup
     d = dim(grid)
 
