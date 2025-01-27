@@ -37,7 +37,7 @@ function apply!(kernel!, setup, args...)
     (; grid, backend, workgroupsize) = setup
     ndrange = ntuple(Returns(grid.n), dim(grid))
     kernel!(backend, workgroupsize)(grid, args...; ndrange)
-    # KernelAbstractions.synchronize(backend)
+    KernelAbstractions.synchronize(backend)
     nothing
 end
 
@@ -348,7 +348,7 @@ Add the force field to `f`.
 """
 convectiondiffusion!
 
-@kernel inbounds = true function convectiondiffusion!(g::Grid, f, u, visc)
+@kernel function convectiondiffusion!(g::Grid, f, u, visc)
     T = eltype(u)
     dims = 1:dim(g)
     x = @index(Global, Cartesian)

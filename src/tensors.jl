@@ -74,29 +74,17 @@ end
     ∇u[x] = ∇_collocated(grid, u, x)
 end
 
-@kernel function tensorproduct!(grid, uv, u, v)
-    (; n) = grid
-    if dim(grid) == 2
-        x, y = @index(Global, NTuple)
-        uvec =
-            SVector((u[x, y, 1] + u[x-1|>g, y, 1]) / 2, (u[x, y, 2] + u[x, y-1|>g, 2]) / 2)
-        vvec =
-            SVector((v[x, y, 1] + v[x-1|>g, y, 1]) / 2, (v[x, y, 2] + v[x, y-1|>g, 2]) / 2)
-        uv[x, y] = uvec * vvec'
+"Compute ``u v^T`` in the collocated points."
+@kernel function tensorproduct!(g::Grid, uv, u, v)
+    x = @index(Global, Cartesian)
+    if dim(g) == 2
+        uvec = SVector(pol(g, u, x, 1, 1), pol(g, u, x, 2, 2))
+        vvec = SVector(pol(g, v, x, 1, 1), pol(g, v, x, 2, 2))
     else
-        x, y, z = @index(Global, NTuple)
-        uvec = SVector(
-            (u[x, y, z, 1] + u[x-1|>g, y, z, 1]) / 2,
-            (u[x, y, z, 2] + u[x, y-1|>g, z, 2]) / 2,
-            (u[x, y, z, 3] + u[x, y, z-1|>g, 3]) / 2,
-        )
-        vvec = SVector(
-            (v[x, y, z, 1] + v[x-1|>g, y, z, 1]) / 2,
-            (v[x, y, z, 2] + v[x, y-1|>g, z, 2]) / 2,
-            (v[x, y, z, 3] + v[x, y, z-1|>g, 3]) / 2,
-        )
-        uv[x, y, z] = uvec * vvec'
+        uvec = SVector(pol(g, u, x, 1, 1), pol(g, u, x, 2, 2), pol(g, u, x, 3, 3))
+        vvec = SVector(pol(g, v, x, 1, 1), pol(g, v, x, 2, 2), pol(g, v, x, 3, 3))
     end
+    uv[x] = uvec * vvec'
 end
 
 @kernel function dissipation!(grid, ϵ, u, visc)

@@ -137,7 +137,7 @@ function randomfield(setup, solver!, A = 1, kp = 10, rng = Random.default_rng())
     u = @. A * real(u)
 
     # Make velocity field divergence free on staggered grid
-    # (it is already diergence free on the "spectral grid")
+    # (it is already divergence free on the "spectral grid")
     p = scalarfield(setup)
     project!(u, p, solver!, setup)
     u
