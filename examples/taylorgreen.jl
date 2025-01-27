@@ -116,7 +116,7 @@ ubar = Turbulox.vectorfield(setup);
 ∇u = Turbulox.collocated_tensorfield(setup);
 q = Turbulox.scalarfield(setup);
 r = Turbulox.scalarfield(setup);
-Turbulox.gaussian!(ubar, u, T(1/50), setup);
+Turbulox.gaussian!(ubar, u, T(1 / 50), setup);
 Turbulox.apply!(Turbulox.velocitygradient_collocated!, setup, ∇u, u);
 # Turbulox.apply!(Turbulox.velocitygradient!, setup, ∇u, ubar);
 Turbulox.apply!(Turbulox.compute_qr!, setup, q, r, ∇u);

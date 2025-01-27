@@ -8,12 +8,8 @@ using Random
 using CUDA
 using GLMakie
 
-grid = Turbulox.Grid(; order = 8, dim = 2, n = 128);
-setup = Turbulox.problem_setup(;
-    grid,
-    visc = 1 / 6000,
-    backend = CUDABackend(),
-);
+grid = Turbulox.Grid(; order = 8, dim = 3, n = 32);
+setup = Turbulox.problem_setup(; grid, visc = 1 / 6000, backend = CUDABackend());
 solver! = Turbulox.poissonsolver(setup);
 cache = (;
     ustart = Turbulox.vectorfield(setup),
@@ -23,6 +19,21 @@ cache = (;
 u = Turbulox.vectorfield(setup);
 randn!(u);
 u .*= 10;
+
+ubar = Turbulox.vectorfield(setup);
+τ = Turbulox.collocated_tensorfield(setup);
+σ = Turbulox.collocated_tensorfield(setup);
+Turbulox.gaussian!(ubar, u, 0.1, setup);
+Turbulox.apply!(Turbulox.tensorproduct!, setup, σ, u, u)
+Turbulox.gaussian!(τ, σ, 0.1, setup);
+Turbulox.apply!(Turbulox.tensorproduct!, setup, σ, ubar, ubar)
+@. τ = τ - σ
+
+CUDA.@allowscalar τ[1]
+CUDA.@allowscalar uu[1]
+CUDA.@allowscalar uubar[1]
+
+Turbulox.filter_kernel!
 
 solver!.ahat.contents[1] / grid.n^2
 
@@ -46,9 +57,13 @@ u
 
 u[:, :, 1] |> Array |> heatmap
 
-f = zero(u);
-Turbulox.apply!(Turbulox.convectiondiffusion!, setup, f, u, setup.visc)
-f
+du = zero(u);
+@benchmark begin
+    fill!(du, 0)
+    Turbulox.apply!(Turbulox.convectiondiffusion!, setup, du, u, setup.visc)
+end
+
+du
 
 ω = Turbulox.scalarfield(setup)
 ω_cpu = Array(ω)
@@ -106,4 +121,3 @@ end
 # f
 #
 # Turbulox.step_wray3!(Turbulox.default_right_hand_side!, u, cache, 1e-3, solver!, setup)
-
