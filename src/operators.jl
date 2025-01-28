@@ -590,7 +590,7 @@ function get_scale_numbers(u, setup)
     end
     t_int = L / uavg
     t_tay = λ / uavg
-    t_kol = eta / uavg
+    t_kol = visc / ϵ |> sqrt
     Re_int = L * uavg / visc
     Re_tay = λ * uavg / sqrt(T(3)) / visc
     Re_kol = eta * uavg / sqrt(T(3)) / visc
