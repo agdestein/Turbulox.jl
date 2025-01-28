@@ -133,6 +133,12 @@ end
     )
 end
 
+invariant_scalers(g::Grid{o,2}, t) where {o} = t^2, t^2
+invariant_scalers(g::Grid{o,3}, t) where {o} = t^2, t^2, t^3, t^3, t^4
+tensorbasis_scalers(g::Grid{o,2}, t) where {o} = one(t), t, t^2
+tensorbasis_scalers(g::Grid{o,3}, t) where {o} =
+    one(t), t, t^2, t^2, t^2, t^3, t^3, t^4, t^4, t^4, t^5
+
 @inline ninvariant(::Grid{o,2}) where {o} = 2
 @inline ninvariant(::Grid{o,3}) where {o} = 5
 @inline ntensorbasis(::Grid{o,2}) where {o} = 3
