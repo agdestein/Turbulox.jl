@@ -94,52 +94,126 @@ end
     ϵ[x] = 2 * visc * dot(S, S)
 end
 
-@kernel function tensorbasis!(grid, B, V, ∇u)
+@inline function invariants(::Grid{o,2}, ∇u) where {o}
+    S = (∇u + ∇u') / 2
+    R = (∇u - ∇u') / 2
+    dot(S, S), dot(R, R)
+end
+
+@inline function invariants(::Grid{o,3}, ∇u) where {o}
+    S = (∇u + ∇u') / 2
+    R = (∇u - ∇u') / 2
+    tr(S * S), tr(R * R), tr(S * S * S), tr(S * R * R), tr(S * S * R * R)
+end
+
+"Compute Pope's tensor basis [popeTurbulentFlows2000](@cite)."
+tensorbasis
+
+@inline function tensorbasis(::Grid{o,2}, ∇u) where {o}
+    S = (∇u + ∇u') / 2
+    R = (∇u - ∇u') / 2
+    idtensor(grid), S, S * R - R * S
+end
+
+@inline function tensorbasis(g::Grid{o,3}, ∇u) where {o}
+    S = (∇u + ∇u') / 2
+    R = (∇u - ∇u') / 2
+    (
+        idtensor(g),
+        S,
+        S * R - R * S,
+        S * S,
+        R * R,
+        S * S * R - R * S * S,
+        S * R * R + R * R * S,
+        R * S * R * R - R * R * S * R,
+        S * R * S * S - S * S * R * S,
+        S * S * R * R + R * R * S * S,
+        R * S * S * R * R - R * R * S * S * R,
+    )
+end
+
+@inline ninvariant(::Grid{o,2}) where {o} = 2
+@inline ninvariant(::Grid{o,3}) where {o} = 5
+@inline ntensorbasis(::Grid{o,2}) where {o} = 3
+@inline ntensorbasis(::Grid{o,3}) where {o} = 11
+
+"Fill `V` with invariants."
+@kernel function fill_invariants!(grid, V, ∇u)
     x = @index(Global, Cartesian)
-    S = (∇u[x] + ∇u[x]') / 2
-    R = (∇u[x] - ∇u[x]') / 2
-    if dim(grid) == 2
-        B[x, 1] = idtensor(grid)
-        B[x, 2] = S
-        B[x, 3] = S * R - R * S
-        V[x, 1] = dot(S, S)
-        V[x, 2] = dot(R, R)
-    else
-        B[x, 1] = idtensor(grid)
-        B[x, 2] = S
-        B[x, 3] = S * R - R * S
-        B[x, 4] = S * S
-        B[x, 5] = R * R
-        B[x, 6] = S * S * R - R * S * S
-        B[x, 7] = S * R * R + R * R * S
-        B[x, 8] = R * S * R * R - R * R * S * R
-        B[x, 9] = S * R * S * S - S * S * R * S
-        B[x, 10] = S * S * R * R + R * R * S * S
-        B[x, 11] = R * S * S * R * R - R * R * S * S * R
-        V[x, 1] = tr(S * S)
-        V[x, 2] = tr(R * R)
-        V[x, 3] = tr(S * S * S)
-        V[x, 4] = tr(S * R * R)
-        V[x, 5] = tr(S * S * R * R)
+    v = invariants(grid, ∇u[x])
+    @unroll for i = 1:ninvariant(grid)
+        V[i, x] = v[i]
     end
+end
+
+"Fill `B` with basis tensors."
+@kernel function fill_tensorbasis!(grid, B, ∇u)
+    x = @index(Global, Cartesian)
+    b = tensorbasis(grid, ∇u[x])
+    if dim(grid) == 2
+        B[1, x] = b[1]
+        B[2, x] = b[2]
+        B[3, x] = b[3]
+    else
+        B[1, x] = b[1]
+        B[2, x] = b[2]
+        B[3, x] = b[3]
+        B[4, x] = b[4]
+        B[5, x] = b[5]
+        B[6, x] = b[6]
+        B[7, x] = b[7]
+        B[8, x] = b[8]
+        B[9, x] = b[9]
+        B[10, x] = b[10]
+        B[11, x] = b[11]
+    end
+end
+
+"Expand tensor basis `B` and fill `τ[x] = c[i, x] * B[i, x]` (sum over `i`)."
+@kernel function expand_tensorbasis!(grid, τ, c, ∇u)
+    x = @index(Global, Cartesian)
+    b = tensorbasis(grid, ∇u[x])
+    τx = zero(eltype(τ))
+    # @unroll for i = 1:ntensorbasis(grid)
+    #     τx += c[i, x] * b[i]
+    # end
+    if dim(grid) == 2
+        τx += c[1, x] * b[1]
+        τx += c[2, x] * b[2]
+        τx += c[3, x] * b[3]
+    else
+        τx += c[1, x] * b[1]
+        τx += c[2, x] * b[2]
+        τx += c[3, x] * b[3]
+        τx += c[4, x] * b[4]
+        τx += c[5, x] * b[5]
+        τx += c[6, x] * b[6]
+        τx += c[7, x] * b[7]
+        τx += c[8, x] * b[8]
+        τx += c[9, x] * b[9]
+        τx += c[10, x] * b[10]
+        τx += c[11, x] * b[11]
+    end
+    τ[x] = τx
 end
 
 @kernel function strain!(grid, S, u)
     x = @index(Global, Cartesian)
     @unroll for i = 1:dim(grid)
         @unroll for j = 1:dim(grid)
-            Aij = δ(grid, u, x, i, j)
-            Aji = δ(grid, u, x, j, i)
-            S[x, i, j] = (Aij + Aji) / 2
+            Gij = δ(grid, u, x, i, j)
+            Gji = δ(grid, u, x, j, i)
+            S[x, i, j] = (Gij + Gji) / 2
         end
     end
 end
 
 @kernel function compute_qr!(grid, q, r, ∇u)
     x = @index(Global, Cartesian)
-    A = ∇u[x]
-    q[x] = -tr(A * A) / 2
-    r[x] = -tr(A * A * A) / 3
+    G = ∇u[x]
+    q[x] = -tr(G * G) / 2
+    r[x] = -tr(G * G * G) / 3
 end
 
 """
@@ -168,7 +242,7 @@ Add result to existing force field `f`.
     x = @index(Global, Cartesian)
     dims = 1:dim(g)
     @unroll for i in dims
-        div = f[x, i]
+        div = f[x, i] # add closure to existing force
         @unroll for j in dims
             ei, ej = e(g, i), e(g, j)
             if i == j

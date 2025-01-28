@@ -1,5 +1,5 @@
 function gaussian!(ubar, u, Δ, setup)
-    (; backend, grid) = setup
+    (; backend, workgroupsize, grid) = setup
     n = grid.n
     d = dim(grid)
     T = typeof(Δ)
@@ -19,7 +19,8 @@ function gaussian!(ubar, u, Δ, setup)
     w = adapt(backend, w)
     R = ntuple(Returns(r), d) |> splat(CartesianIndex)
     J = -R:R
-    apply!(filter_kernel!, setup, ubar, u, w, J)
+    filter_kernel!(backend, workgroupsize)(grid, ubar, u, w, J; ndrange = size(u))
+    KernelAbstractions.synchronize(backend)
     ubar, w
 end
 
