@@ -116,19 +116,19 @@ tensorbasis
 end
 
 @inline function tensorbasis(g::Grid{o,3}, ∇u) where {o}
+    T = eltype(∇u)
     S = (∇u + ∇u') / 2
     R = (∇u - ∇u') / 2
     (
-        idtensor(g),
         S,
         S * R - R * S,
-        S * S,
-        R * R,
-        S * S * R - R * S * S,
-        S * R * R + R * R * S,
+        S * S - tr(S * S) / 3 * idtensor(g),
+        R * R - tr(R * R) / 3 * idtensor(g),
+        R * S * S - S * S * R,
+        S * R * R + R * R * S - T(2) / 3 * tr(S * R * R) * idtensor(g),
         R * S * R * R - R * R * S * R,
         S * R * S * S - S * S * R * S,
-        S * S * R * R + R * R * S * S,
+        R * R * S * S + S * S * R * R - T(2) / 3 * tr(S * S * R * R) * idtensor(g),
         R * S * S * R * R - R * R * S * S * R,
     )
 end
@@ -137,12 +137,12 @@ invariant_scalers(g::Grid{o,2}, t) where {o} = t^2, t^2
 invariant_scalers(g::Grid{o,3}, t) where {o} = t^2, t^2, t^3, t^3, t^4
 tensorbasis_scalers(g::Grid{o,2}, t) where {o} = one(t), t, t^2
 tensorbasis_scalers(g::Grid{o,3}, t) where {o} =
-    one(t), t, t^2, t^2, t^2, t^3, t^3, t^4, t^4, t^4, t^5
+    t, t^2, t^2, t^2, t^3, t^3, t^4, t^4, t^4, t^5
 
 @inline ninvariant(::Grid{o,2}) where {o} = 2
 @inline ninvariant(::Grid{o,3}) where {o} = 5
 @inline ntensorbasis(::Grid{o,2}) where {o} = 3
-@inline ntensorbasis(::Grid{o,3}) where {o} = 11
+@inline ntensorbasis(::Grid{o,3}) where {o} = 10
 
 "Fill `V` with invariants."
 @kernel function fill_invariants!(grid, V, ∇u)
@@ -172,7 +172,6 @@ end
         B[8, x] = b[8]
         B[9, x] = b[9]
         B[10, x] = b[10]
-        B[11, x] = b[11]
     end
 end
 
@@ -199,7 +198,6 @@ end
         τx += c[8, x] * b[8]
         τx += c[9, x] * b[9]
         τx += c[10, x] * b[10]
-        τx += c[11, x] * b[11]
     end
     τ[x] = τx
 end
