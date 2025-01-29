@@ -24,6 +24,25 @@ function gaussian!(ubar, u, Δ, setup)
     ubar, w
 end
 
+function tophat!(ubar, u, Δ, setup)
+    (; backend, workgroupsize, grid) = setup
+    n = grid.n
+    d = dim(grid)
+    T = typeof(Δ)
+    h = 1 / n
+    r = round(Int, Δ * n / 2)
+    @assert 2r / n ≈ Δ # This ensures that r is the same in every direction
+    # a = (6 / π / Δ^2)^(3 / 2) |> T
+    w = fill(T(1) / (2r + 1)^d, ntuple(Returns(2r + 1), d))
+    # @assert sum(w) ≈ 1
+    w = adapt(backend, w)
+    R = ntuple(Returns(r), d) |> splat(CartesianIndex)
+    J = -R:R
+    filter_kernel!(backend, workgroupsize)(grid, ubar, u, w, J; ndrange = size(u))
+    KernelAbstractions.synchronize(backend)
+    ubar, w
+end
+
 @kernel function filter_kernel!(g::Grid, ubar, u, w, J)
     xx = @index(Global, NTuple)
     d = dim(g)
