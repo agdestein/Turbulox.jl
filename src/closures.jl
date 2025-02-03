@@ -1,7 +1,7 @@
 @kernel function clark_tensor!(grid, G, Δ)
     x = @index(Global, Cartesian)
     g = G[x]
-    G[x] = -Δ^2 / 12 * g * g'
+    G[x] = Δ^2 / 12 * g * g'
 end
 
 """
@@ -17,9 +17,9 @@ function clark_model(setup, Δ)
 end
 
 """
-Divergence of `2 * visc * S`.
+Divergence of `-2 * visc * S`.
 Interpolate `visc` to staggered points first.
-Add result to existing force field `f`.
+Subtract result from existing force field `f`.
 """
 @kernel function eddyviscosity_closure!(g::Grid, f, visc, ∇u)
     x = @index(Global, Cartesian)
@@ -45,6 +45,13 @@ Add result to existing force field `f`.
     end
 end
 
+@kernel function eddyviscosity_tensor2!(grid, τ, visc, ∇u)
+    x = @index(Global, Cartesian)
+    G = ∇u[x]
+    S = (G + G') / 2
+    τ[x] = -2 * visc[x] * S
+end
+
 "Eddy viscosity closure model."
 function eddyviscosity_model(viscosity!, setup, C, Δ)
     ∇u = staggered_tensorfield(setup)
@@ -57,22 +64,25 @@ function eddyviscosity_model(viscosity!, setup, C, Δ)
     end
 end
 
+function strainnorm(::Grid{o,2}, G) where {o}
+    s11, s22, s12 = G[1, 1], G[2, 2], (G[1, 2] + G[2, 1]) / 2
+    sqrt(2s11^2 + 2s22^2 + 4s12^2)
+end
+function strainnorm(::Grid{o,3}, G) where {o}
+    s11, s22, s33 = G[1, 1], G[2, 2], G[3, 3]
+    s12, s13, s23 =
+        (G[1, 2] + G[2, 1]) / 2, (G[1, 3] + G[3, 1]) / 2, (G[2, 3] + G[3, 2]) / 2
+    sqrt(2s11^2 + 2s22^2 + 2s33^2 + 4s12^2 + 4s13^2 + 4s23^2)
+end
+
 """
 Compute Smagorinsky's original eddy viscosity [smagorinskyGeneralCirculationExperiments1963](@cite).
 Proposed value for `C` is 0.17.
 """
-@kernel function smagorinsky_viscosity!(g::Grid, visc, ∇u, C, Δ)
+@kernel function smagorinsky_viscosity!(grid, visc, ∇u, C, Δ)
     x = @index(Global, Cartesian)
-    G = pol_tensor_collocated(g, ∇u, x)
-    s = if dim(g) == 2
-        s11, s22, s12 = G[1, 1], G[2, 2], (G[1, 2] + G[2, 1]) / 2
-        sqrt(2s11^2 + 2s22^2 + 4s12^2)
-    else
-        s11, s22, s33 = G[1, 1], G[2, 2], G[3, 3]
-        s12, s13, s23 =
-            (G[1, 2] + G[2, 1]) / 2, (G[1, 3] + G[3, 1]) / 2, (G[2, 3] + G[3, 2]) / 2
-        sqrt(2s11^2 + 2s22^2 + 2s33^2 + 4s12^2 + 4s13^2 + 4s23^2)
-    end
+    G = pol_tensor_collocated(grid, ∇u, x)
+    s = strainnorm(grid, G)
     visc[x] = (C * Δ)^2 * s
 end
 

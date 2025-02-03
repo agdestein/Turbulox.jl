@@ -33,9 +33,11 @@ using KernelAbstractions
 end
 ```
 """
-function apply!(kernel!, setup, args...)
+function apply!(kernel!, setup, args...; ndrange = nothing)
     (; grid, backend, workgroupsize) = setup
-    ndrange = ntuple(Returns(grid.n), dim(grid))
+    if isnothing(ndrange)
+        ndrange = ntuple(Returns(grid.n), dim(grid))
+    end
     kernel!(backend, workgroupsize)(grid, args...; ndrange)
     KernelAbstractions.synchronize(backend)
     nothing
@@ -124,11 +126,11 @@ Put the result in `div`.
 """
 divergence!
 
-@kernel function divergence!(g::Grid, div, u)
+@kernel function divergence!(grid, div, u)
     x = @index(Global, Cartesian)
     divx = zero(eltype(div))
-    @unroll for j = 1:dim(g)
-        divx += δ(g, u, x, j, j)
+    @unroll for j = 1:dim(grid)
+        divx += δ(grid, u, x, j, j)
     end
     div[x] = divx
 end
@@ -348,41 +350,41 @@ Add the force field to `f`.
 """
 convectiondiffusion!
 
-@kernel function convectiondiffusion!(g::Grid, f, u, visc)
+@kernel function convectiondiffusion!(grid, f, u, visc)
     T = eltype(u)
-    dims = 1:dim(g)
+    dims = 1:dim(grid)
     x = @index(Global, Cartesian)
     @unroll for i in dims
         fxi = f[x, i]
         @unroll for j in dims
-            fxi -= convterm(g, u, x, i, j)
-            fxi += visc * diffusionterm(g, u, x, i, j)
+            fxi -= convterm(grid, u, x, i, j)
+            fxi += visc * diffusionterm(grid, u, x, i, j)
         end
         f[x, i] = fxi
     end
 end
 
-@kernel function convection!(g::Grid, f, u)
+@kernel function convection!(grid, f, u)
     T = eltype(u)
-    dims = 1:dim(g)
+    dims = 1:dim(grid)
     x = @index(Global, Cartesian)
     @unroll for i in dims
         fxi = f[x, i]
         @unroll for j in dims
-            fxi -= convterm(g, u, x, i, j)
+            fxi -= convterm(grid, u, x, i, j)
         end
         f[x, i] = fxi
     end
 end
 
-@kernel function diffusion!(g::Grid, f, u, visc)
+@kernel function diffusion!(grid, f, u, visc)
     T = eltype(u)
-    dims = 1:dim(g)
+    dims = 1:dim(grid)
     x = @index(Global, Cartesian)
     @unroll for i in dims
         fxi = f[x, i]
         @unroll for j in dims
-            fxi += visc * diffusionterm(g, u, x, i, j)
+            fxi += visc * diffusionterm(grid, u, x, i, j)
         end
         f[x, i] = fxi
     end

@@ -94,6 +94,13 @@ end
     ϵ[x] = 2 * visc * dot(S, S)
 end
 
+@kernel function tensordissipation!(grid, diss, σ, ∇u)
+    x = @index(Global, Cartesian)
+    G = ∇u[x]
+    S = (G + G') / 2
+    diss[x] = -dot(σ[x], S)
+end
+
 @inline function invariants(::Grid{o,2}, ∇u) where {o}
     S = (∇u + ∇u') / 2
     R = (∇u - ∇u') / 2
@@ -119,16 +126,17 @@ end
     T = eltype(∇u)
     S = (∇u + ∇u') / 2
     R = (∇u - ∇u') / 2
+    I = idtensor(g)
     (
         S,
         S * R - R * S,
-        S * S - tr(S * S) / 3 * idtensor(g),
-        R * R - tr(R * R) / 3 * idtensor(g),
+        S * S - tr(S * S) / 3 * I,
+        R * R - tr(R * R) / 3 * I,
         R * S * S - S * S * R,
-        S * R * R + R * R * S - T(2) / 3 * tr(S * R * R) * idtensor(g),
+        S * R * R + R * R * S - T(2) / 3 * tr(S * R * R) * I,
         R * S * R * R - R * R * S * R,
         S * R * S * S - S * S * R * S,
-        R * R * S * S + S * S * R * R - T(2) / 3 * tr(S * S * R * R) * idtensor(g),
+        R * R * S * S + S * S * R * R - T(2) / 3 * tr(S * S * R * R) * I,
         R * S * S * R * R - R * R * S * S * R,
     )
 end
@@ -221,8 +229,9 @@ end
 end
 
 """
-Divergence of staggered tensor field.
-Add result to existing force field `f`.
+Divergence of staggered tensor field ``σ``.
+Subtract result from existing force field ``f``.
+The operation is ``f_i \\leftarrow f_i - ∂_j σ_{i j}``.
 """
 @kernel function tensordivergence!(g::Grid, f, σ)
     x = @index(Global, Cartesian)
@@ -231,16 +240,17 @@ Add result to existing force field `f`.
         div = f[x, i]
         @unroll for j in dims
             ei, ej = e(g, i), e(g, j)
-            div += g.n * (σ[x+(i==j)*ej, i, j] - σ[x-(i!=j)*ej, i, j])
+            div -= g.n * (σ[x+(i==j)*ej, i, j] - σ[x-(i!=j)*ej, i, j])
         end
         f[x, i] = div
     end
 end
 
 """
-Divergence of collocated tensor field.
+Divergence of collocated tensor field ``\\sigma``.
 First interpolate to staggered points.
-Add result to existing force field `f`.
+Subtract result from existing force field ``f``.
+The operation is ``f_i \\leftarrow f_i - ∂_j σ_{i j}``.
 """
 @kernel function tensordivergence_collocated!(g::Grid, f, σ)
     x = @index(Global, Cartesian)
@@ -268,7 +278,7 @@ Add result to existing force field `f`.
                         σ[x+ej|>g][i, j]
                     ) / 4
             end
-            div += g.n * (σb - σa)
+            div -= g.n * (σb - σa)
         end
         f[x, i] = div
     end
