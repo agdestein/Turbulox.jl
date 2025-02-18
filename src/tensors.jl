@@ -21,6 +21,25 @@ end
     SMatrix{3,3,eltype(σ),9}(σ11, σ21, σ31, σ12, σ22, σ32, σ13, σ23, σ33)
 end
 
+"Interpolate collocated tensor to staggered tensor."
+@inline function pol_tensor_stag(g::Grid, σ, x, i, j)
+    ei, ej = e(g, i), e(g, j)
+    if i == j
+        σ[x][i, j]
+    else
+        (σ[x][i, j] + σ[x+ei|>g][i, j] + σ[x+ej|>g][i, j] + σ[x+ei+ej|>g][i, j]) / 4
+    end
+end
+
+@kernel function pol_tensor_stag!(g::Grid, σ_stag, σ_coll)
+    x = @index(Global, Cartesian)
+    @unroll for j = 1:dim(g)
+        @unroll for i = 1:dim(g)
+            σ_stag[x, i, j] = pol_tensor_stag(g, σ_coll, x, i, j)
+        end
+    end
+end
+
 @inline function δ_collocated(g::Grid, u, x, i, j)
     ei, ej = e(g, i), e(g, j)
     if i == j
@@ -75,7 +94,7 @@ end
 end
 
 "Compute ``u v^T`` in the collocated points."
-@kernel function tensorproduct!(g::Grid, uv, u, v)
+@kernel function tensorproduct_collocated!(g::Grid, uv, u, v)
     x = @index(Global, Cartesian)
     if dim(g) == 2
         uvec = SVector(pol(g, u, x, 1, 1), pol(g, u, x, 2, 2))
@@ -85,6 +104,40 @@ end
         vvec = SVector(pol(g, v, x, 1, 1), pol(g, v, x, 2, 2), pol(g, v, x, 3, 3))
     end
     uv[x] = uvec * vvec'
+end
+
+"Compute ``u v^T`` in the staggered points."
+@kernel function tensorproduct_stag!(g::Grid, uv, u, v)
+    x = @index(Global, Cartesian)
+    if dim(g) == 2
+        u11, v11 = pol(g, u, x, 1, 1), pol(g, v, x, 1, 1)
+        u12, v12 = pol(g, u, x, 1, 2), pol(g, v, x, 1, 2)
+        u21, v22 = pol(g, u, x, 2, 1), pol(g, v, x, 2, 2)
+        u22, v22 = pol(g, u, x, 2, 2), pol(g, v, x, 2, 2)
+        uv[x, 1, 1] = u11 * v11
+        uv[x, 2, 1] = u21 * v12
+        uv[x, 1, 2] = u12 * v21
+        uv[x, 2, 2] = u22 * v22
+    else
+        u11, v11 = pol(g, u, x, 1, 1), pol(g, v, x, 1, 1)
+        u12, v12 = pol(g, u, x, 1, 2), pol(g, v, x, 1, 2)
+        u13, v13 = pol(g, u, x, 1, 3), pol(g, v, x, 1, 3)
+        u21, v21 = pol(g, u, x, 2, 1), pol(g, v, x, 2, 1)
+        u22, v22 = pol(g, u, x, 2, 2), pol(g, v, x, 2, 2)
+        u23, v23 = pol(g, u, x, 2, 3), pol(g, v, x, 2, 3)
+        u31, v31 = pol(g, u, x, 3, 1), pol(g, v, x, 3, 1)
+        u32, v32 = pol(g, u, x, 3, 2), pol(g, v, x, 3, 2)
+        u33, v33 = pol(g, u, x, 3, 3), pol(g, v, x, 3, 3)
+        uv[x, 1, 1] = u11 * v11
+        uv[x, 2, 1] = u21 * v12
+        uv[x, 3, 1] = u31 * v13
+        uv[x, 1, 2] = u12 * v21
+        uv[x, 2, 2] = u22 * v22
+        uv[x, 3, 2] = u32 * v23
+        uv[x, 1, 3] = u13 * v31
+        uv[x, 2, 3] = u23 * v32
+        uv[x, 3, 3] = u33 * v33
+    end
 end
 
 @kernel function dissipation!(grid, ϵ, u, visc)
@@ -104,7 +157,7 @@ end
 @inline function invariants(::Grid{o,2}, ∇u) where {o}
     S = (∇u + ∇u') / 2
     R = (∇u - ∇u') / 2
-    dot(S, S), dot(R, R)
+    tr(S * S), tr(R * R)
 end
 
 @inline function invariants(::Grid{o,3}, ∇u) where {o}
@@ -226,6 +279,12 @@ end
     G = ∇u[x]
     q[x] = -tr(G * G) / 2
     r[x] = -tr(G * G * G) / 3
+end
+
+@kernel function compute_q!(grid, q, ∇u)
+    x = @index(Global, Cartesian)
+    G = ∇u[x]
+    q[x] = -tr(G * G) / 2
 end
 
 """

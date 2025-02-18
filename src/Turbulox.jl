@@ -26,11 +26,13 @@ end
 @inline dim(::Grid{o,d}) where {o,d} = d
 
 "Get unit index in dimension `i`."
-@inline e(grid, i) = CartesianIndex(ntuple(j -> j == i, dim(grid)))
+@inline e(grid, i) = CartesianIndex(ntuple(==(i), dim(grid)))
 
 # Extend index periodically so that it stays within the domain.
 @inline (g::Grid)(i::Integer) = mod1(i, g.n)
 @inline (g::Grid)(x::CartesianIndex) = CartesianIndex(mod1.(x.I, g.n))
+
+get_axis(grid) = range(0, 1, grid.n+1)[2:end]
 
 """
 Problem setup.

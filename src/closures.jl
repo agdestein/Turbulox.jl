@@ -45,7 +45,7 @@ Subtract result from existing force field `f`.
     end
 end
 
-@kernel function eddyviscosity_tensor2!(grid, τ, visc, ∇u)
+@kernel function eddyviscosity_tensor!(grid, τ, visc, ∇u)
     x = @index(Global, Cartesian)
     G = ∇u[x]
     S = (G + G') / 2
