@@ -24,15 +24,15 @@ const w10_9 = 35 // 32768
 
 # Vector field gradient δu[i] / δx[j].
 @inline δ1(g::Grid, u, x, i, j) =
-    g.n * (u[x+(i!=j)*e(g, j)|>g, i] - u[x-(i==j)*e(g, j)|>g, i])
+    g.n / g.L * (u[x+(i!=j)*e(g, j)|>g, i] - u[x-(i==j)*e(g, j)|>g, i])
 @inline δ3(g::Grid, u, x, i, j) =
-    g.n * (u[x+(1+(i!=j))*e(g, j)|>g, i] - u[x-(1+(i==j))*e(g, j)|>g, i]) / 3
+    g.n / g.L * (u[x+(1+(i!=j))*e(g, j)|>g, i] - u[x-(1+(i==j))*e(g, j)|>g, i]) / 3
 @inline δ5(g::Grid, u, x, i, j) =
-    g.n * (u[x+(2+(i!=j))*e(g, j)|>g, i] - u[x-(2+(i==j))*e(g, j)|>g, i]) / 5
+    g.n / g.L * (u[x+(2+(i!=j))*e(g, j)|>g, i] - u[x-(2+(i==j))*e(g, j)|>g, i]) / 5
 @inline δ7(g::Grid, u, x, i, j) =
-    g.n * (u[x+(3+(i!=j))*e(g, j)|>g, i] - u[x-(3+(i==j))*e(g, j)|>g, i]) / 7
+    g.n / g.L * (u[x+(3+(i!=j))*e(g, j)|>g, i] - u[x-(3+(i==j))*e(g, j)|>g, i]) / 7
 @inline δ9(g::Grid, u, x, i, j) =
-    g.n * (u[x+(4+(i!=j))*e(g, j)|>g, i] - u[x-(4+(i==j))*e(g, j)|>g, i]) / 9
+    g.n / g.L * (u[x+(4+(i!=j))*e(g, j)|>g, i] - u[x-(4+(i==j))*e(g, j)|>g, i]) / 9
 @inline δ(g::Grid{2}, u, x, i, j) = δ1(g, u, x, i, j)
 @inline δ(g::Grid{4}, u, x, i, j) = w4_1 * δ1(g, u, x, i, j) + w4_3 * δ3(g, u, x, i, j)
 @inline δ(g::Grid{6}, u, x, i, j) =
@@ -50,11 +50,11 @@ const w10_9 = 35 // 32768
     w10_9 * δ9(g, u, x, i, j)
 
 # Scalar field gradient δp / δx[j].
-@inline δ1(g::Grid, p, x, j) = g.n * (p[x+e(g, j)|>g] - p[x])
-@inline δ3(g::Grid, p, x, j) = g.n * (p[x+2*e(g, j)|>g] - p[x-1e(g, j)|>g]) / 3
-@inline δ5(g::Grid, p, x, j) = g.n * (p[x+3*e(g, j)|>g] - p[x-2e(g, j)|>g]) / 5
-@inline δ7(g::Grid, p, x, j) = g.n * (p[x+4*e(g, j)|>g] - p[x-3e(g, j)|>g]) / 7
-@inline δ9(g::Grid, p, x, j) = g.n * (p[x+5*e(g, j)|>g] - p[x-4e(g, j)|>g]) / 9
+@inline δ1(g::Grid, p, x, j) = g.n / g.L * (p[x+e(g, j)|>g] - p[x])
+@inline δ3(g::Grid, p, x, j) = g.n / g.L * (p[x+2*e(g, j)|>g] - p[x-1e(g, j)|>g]) / 3
+@inline δ5(g::Grid, p, x, j) = g.n / g.L * (p[x+3*e(g, j)|>g] - p[x-2e(g, j)|>g]) / 5
+@inline δ7(g::Grid, p, x, j) = g.n / g.L * (p[x+4*e(g, j)|>g] - p[x-3e(g, j)|>g]) / 7
+@inline δ9(g::Grid, p, x, j) = g.n / g.L * (p[x+5*e(g, j)|>g] - p[x-4e(g, j)|>g]) / 9
 @inline δ(g::Grid{2}, p, x, j) = δ1(g, p, x, j)
 @inline δ(g::Grid{4}, p, x, j) = w4_1 * δ1(g, p, x, j) + w4_3 * δ3(g, p, x, j)
 @inline δ(g::Grid{6}, p, x, j) =
@@ -129,7 +129,7 @@ function convterm end
     ui_uj_a = ui_xj_a * uj_xi_a
     ui_uj_b = ui_xj_b * uj_xi_b
 
-    g.n * (ui_uj_b - ui_uj_a)
+    g.n / g.L * (ui_uj_b - ui_uj_a)
 end
 
 @inline function convterm(g::Grid{4}, u, x, i, j)
@@ -160,7 +160,7 @@ end
 
     # Divergence of tensor: Lands at canonical position of ui in volume x
     # see  Morinishi 1998 eq. (101)
-    g.n * (w4_1 * (ui_uj_1b - ui_uj_1a) + w4_3 * (ui_uj_3b - ui_uj_3a) / 3)
+    g.n / g.L * (w4_1 * (ui_uj_1b - ui_uj_1a) + w4_3 * (ui_uj_3b - ui_uj_3a) / 3)
 end
 
 @inline function convterm(g::Grid{6}, u, x, i, j)
@@ -198,7 +198,7 @@ end
 
     # Divergence of tensor: Lands at canonical position of ui in volume x
     # see  Morinishi 1998 eq. (112)
-    g.n * (
+    g.n / g.L * (
         w6_1 * (ui_uj_1b - ui_uj_1a) +
         w6_3 * (ui_uj_3b - ui_uj_3a) / 3 +
         w6_5 * (ui_uj_5b - ui_uj_5a) / 5
@@ -247,7 +247,7 @@ end
 
     # Divergence of tensor: Lands at canonical position of ui in volume x
     # coefficient computed in script
-    g.n * (
+    g.n / g.L * (
         w8_1 * (ui_uj_1b - ui_uj_1a) +
         w8_3 * (ui_uj_3b - ui_uj_3a) / 3 +
         w8_5 * (ui_uj_5b - ui_uj_5a) / 5 +
@@ -304,7 +304,7 @@ end
 
     # Divergence of tensor: Lands at canonical position of ui in volume x
     # coefficient computed in script
-    g.n * (
+    g.n / g.L * (
         w10_1 * (ui_uj_1b - ui_uj_1a) +
         w10_3 * (ui_uj_3b - ui_uj_3a) / 3 +
         w10_5 * (ui_uj_5b - ui_uj_5a) / 5 +
@@ -369,11 +369,11 @@ end
     end
 end
 
-laplace_stencil(g::Grid{2}) = (1, -2, 1) .* g.n^2
-laplace_stencil(g::Grid{4}) = (1, -54, 783, -1460, 783, -54, 1) .// 576 .* g.n^2
+laplace_stencil(g::Grid{2}) = (1, -2, 1) .* (g.n / g.L)^2
+laplace_stencil(g::Grid{4}) = (1, -54, 783, -1460, 783, -54, 1) .// 576 .* (g.n / g.L)^2
 laplace_stencil(g::Grid{6}) =
     (81, -2250, 56125, -603000, 5627250, -10156412, 5627250, -603000, 56125, -2250, 81) .//
-    1920^2 .* g.n^2
+    1920^2 .* (g.n / g.L)^2
 laplace_stencil(g::Grid{8}) =
     (
         25 // 51380224,
@@ -391,7 +391,7 @@ laplace_stencil(g::Grid{8}) =
         15953 // 78643200,
         -7 // 524288,
         25 // 51380224,
-    ) .* g.n^2
+        ) .* (g.n / g.L)^2
 laplace_stencil(g::Grid{10}) =
     (
         1225 // 86973087744,
@@ -413,7 +413,7 @@ laplace_stencil(g::Grid{10}) =
         336897 // 52613349376,
         -225 // 536870912,
         1225 // 86973087744,
-    ) .* g.n^2
+        ) .* (g.n / g.L)^2
 
 "Merge stencil periodically if the stencil is longer than the grid size `n`."
 mergestencil(s, n) =
@@ -456,7 +456,7 @@ function poissonsolver(setup)
     # ahat = ntuple(d) do i
     #     k = 0:(kmax[i]-1)
     #     ahat = KernelAbstractions.allocate(backend, T, kmax[i])
-    #     @. ahat = 4 * n^2 * sinpi(k / n)^2
+    #     @. ahat = 4 * (n / grid.L)^2 * sinpi(k / n)^2
     #     ahat
     # end
 

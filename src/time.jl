@@ -52,9 +52,9 @@ end
 "Get proposed maximum time step for convection and diffusion terms."
 function propose_timestep(u, setup)
     (; grid, visc) = setup
-    (; n) = grid
-    Δt_diff = 1 / (2 * visc * n^2)
-    Δt_conv = minimum(u -> 1 / abs(u) / n, u)
+    (; n, L) = grid
+    Δt_diff = 1 / (2 * visc * (n / L)^2)
+    Δt_conv = minimum(u -> L / n / abs(u), u)
     Δt = min(Δt_diff, Δt_conv)
     Δt
 end

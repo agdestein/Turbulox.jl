@@ -8,10 +8,12 @@ struct Stag end
 struct Coll end
 
 "Staggered grid of order `o` and dimension `d`."
-struct Grid{o,d}
+struct Grid{o,d,T}
+    "Domain side length."
+    L::T
     "Number of grid points in each dimension."
     n::Int
-    Grid(; order = 2, dim = 2, n) = new{order,dim}(n)
+    Grid(; order = 2, dim = 2, L, n) = new{order,dim,typeof(L)}(L, n)
 end
 
 "Get order of grid."
@@ -27,8 +29,8 @@ end
 @inline (g::Grid)(i::Integer) = mod1(i, g.n)
 @inline (g::Grid)(x::CartesianIndex) = CartesianIndex(mod1.(x.I, g.n))
 
-get_axis(grid, ::Stag) = range(0, 1, grid.n+1)[2:end]
-get_axis(grid, ::Coll) = range(0, 1, grid.n+1)[2:end] .- 1 / 2 / grid.n
+get_axis(g::Grid, ::Stag) = range(0, g.L, g.n+1)[2:end]
+get_axis(g::Grid, ::Coll) = range(0, g.L, g.n+1)[2:end] .- g.L / 2 / g.n
 
 """
 Problem setup.

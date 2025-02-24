@@ -1,18 +1,18 @@
 "Gaussian filter kernel."
 function gaussian(setup, compression, Δ)
     (; backend, grid) = setup
-    n = grid.n
+    (; n, L) = grid
     d = dim(grid)
     T = typeof(Δ)
     # Note:
     #     The standard deviation is σ = Δ / sqrt(12).
     #     This gives Δ ≈ 3.5σ. At x = Δ, the Gaussian is already quite small,
     #     and there is point in including points outside this bound.
-    r = round(Int, Δ / 2 * n)
+    r = round(Int, Δ / 2 * n / L)
     r = 2r # Corresponds to x = Δ, sufficient to cover tail
     @assert isodd(compression)
     w = let
-        x = (-r:r) ./ T(n)
+        x = (-r:r) .* (L / n)
         y = reshape(x, 1, :)
         z = reshape(x, 1, 1, :)
         if d == 2
@@ -30,12 +30,11 @@ end
 
 function tophat(setup, compression, Δ)
     (; backend, grid) = setup
-    n = grid.n
+    (; n, L) = grid
     d = dim(grid)
     T = typeof(Δ)
-    h = 1 / n
-    r = round(Int, Δ * n / 2)
-    @show r n Δ 2r / n
+    h = L / n
+    r = round(Int, Δ / h / 2)
     @assert isodd(compression)
     @assert 2r / n ≈ Δ # This ensures that r is the same in every direction
     w = fill(T(1) / (2r + 1)^d, ntuple(Returns(2r + 1), d))

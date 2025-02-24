@@ -1,44 +1,43 @@
 "Allocate empty scalar field."
 scalarfield(setup) = KernelAbstractions.zeros(
     setup.backend,
-    typeof(setup.visc),
+    typeof(setup.grid.L),
     ntuple(Returns(setup.grid.n), dim(setup.grid)),
 )
 
 "Allocate empty vector field."
 vectorfield(setup) = KernelAbstractions.zeros(
     setup.backend,
-    typeof(setup.visc),
+    typeof(setup.grid.L),
     ntuple(Returns(setup.grid.n), dim(setup.grid))...,
     dim(setup.grid),
 )
 
 "Allocate empty tensor field (collocated)."
 function collocated_tensorfield(setup)
-    (; backend, grid, visc) = setup
+    (; backend, grid) = setup
     d = dim(grid)
     d2 = d * d
-    T = typeof(visc)
+    T = typeof(grid.L)
     KernelAbstractions.zeros(backend, SMatrix{d,d,T,d2}, ntuple(Returns(grid.n), d))
 end
 
 "Allocate empty tensor field (staggered)."
 function staggered_tensorfield(setup)
-    (; backend, grid, visc) = setup
+    (; backend, grid) = setup
     d = dim(grid)
-    T = typeof(visc)
+    T = typeof(grid.L)
     KernelAbstractions.zeros(backend, T, ntuple(Returns(grid.n), d)..., d, d)
 end
 
 function create_spectrum(; setup, kp, rng = Random.default_rng())
-    (; grid, backend, visc) = setup
-    (; n) = grid
-    T = typeof(visc)
+    (; grid, backend) = setup
+    T = typeof(grid.L)
     d = dim(grid)
     τ = T(2π)
 
     # Maximum wavenumber (remove ghost volumes)
-    K = ntuple(Returns(div(n, 2)), d)
+    K = ntuple(Returns(div(grid.n, 2)), d)
 
     # Wavenumber vectors
     kk = ntuple(
@@ -63,7 +62,7 @@ function create_spectrum(; setup, kp, rng = Random.default_rng())
 
     # Velocity magnitude
     a = @. complex(1) * sqrt(A * k^4 * exp(-τ * (k / kp)^2))
-    a .*= n^d
+    a .*= grid.n^d
 
     # Apply random phase shift
     ξ = ntuple(i -> rand!(rng, KernelAbstractions.allocate(backend, T, K)), d)

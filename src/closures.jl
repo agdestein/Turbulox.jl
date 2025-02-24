@@ -39,7 +39,7 @@ Subtract result from existing force field `f`.
                 s_a = (∇u[x-ej|>g, i, j] + ∇u[x-ej|>g, j, i]) / 2
                 s_b = (∇u[x, i, j] + ∇u[x, j, i]) / 2
             end
-            div += 2 * g.n * (s_b * nu_b - s_a * nu_a)
+            div += 2 * g.n / g.L * (s_b * nu_b - s_a * nu_a)
         end
         f[x, i] = div
     end

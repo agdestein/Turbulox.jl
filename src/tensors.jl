@@ -299,7 +299,7 @@ The operation is ``f_i \\leftarrow f_i - ∂_j σ_{i j}``.
         div = f[x, i]
         @unroll for j in dims
             ei, ej = e(g, i), e(g, j)
-            div -= g.n * (σ[x+(i==j)*ej |> g, i, j] - σ[x-(i!=j)*ej |> g, i, j])
+            div -= g.n / g.L * (σ[x+(i==j)*ej |> g, i, j] - σ[x-(i!=j)*ej |> g, i, j])
         end
         f[x, i] = div
     end
@@ -337,7 +337,7 @@ The operation is ``f_i \\leftarrow f_i - ∂_j σ_{i j}``.
                         σ[x+ej|>g][i, j]
                     ) / 4
             end
-            div -= g.n * (σb - σa)
+            div -= g.n / g.L * (σb - σa)
         end
         f[x, i] = div
     end
