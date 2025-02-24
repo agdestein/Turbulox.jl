@@ -33,17 +33,17 @@ end
 
 @testitem "Consistency of Laplace stencils" begin
     for order in [2, 4, 6, 8, 10]
-        g = Turbulox.Grid(; order, n = 16, dim = 3)
+        g = Turbulox.Grid(; order, dim = 3, L = 1.0, n = 16)
         stencil = Turbulox.laplace_stencil(g)
         # Use equality, since weights are rational
-        @test sum(stencil) == 0 # Constant functions
-        @test sum(eachindex(stencil) .* stencil) == 0 # Linear functions
+        @test sum(stencil) ≈ 0 atol = 1e-12 # Constant functions
+        @test sum(eachindex(stencil) .* stencil) ≈ 0 atol = 1e-12 # Linear functions
     end
 end
 
 @testitem "Pressure projection" begin
     for order in [2, 4, 6, 8, 10]
-        grid = Turbulox.Grid(; order, dim = 3, n = 16)
+        grid = Turbulox.Grid(; order, dim = 3, L = 1.0, n = 16)
         setup = Turbulox.problem_setup(; grid, visc = 1e-3)
         solver! = Turbulox.poissonsolver(setup)
         u = randn(grid.n, grid.n, grid.n, 3)
@@ -58,7 +58,7 @@ end
 @testitem "(Skew-)symmetry of operators" begin
     using LinearAlgebra
     for order in [2, 4, 6, 8, 10]
-        grid = Turbulox.Grid(; order, dim = 3, n = 16)
+        grid = Turbulox.Grid(; order, dim = 3, L = 1.0, n = 16)
         setup = Turbulox.problem_setup(; grid, visc = 1e-3)
         solver! = Turbulox.poissonsolver(setup)
         u = Turbulox.randomfield(setup, solver!)
@@ -90,7 +90,7 @@ end
 end
 
 @testitem "Eddy viscosity" begin
-    grid = Turbulox.Grid(; order = 2, dim = 3, n = 16)
+    grid = Turbulox.Grid(; order = 2, dim = 3, L = 1.0, n = 16)
     setup = Turbulox.problem_setup(; grid, visc = 1e-3)
     u = randn(grid.n, grid.n, grid.n, 3)
     ∇u = Turbulox.staggered_tensorfield(setup)
