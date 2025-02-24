@@ -22,27 +22,6 @@ const w10_5 = 567 // 8192
 const w10_7 = -405 // 32768
 const w10_9 = 35 // 32768
 
-"""
-Apply `kernel!` on `setup.grid, args...` over the entire domain.
-The `args` are typically input and output fields.
-The kernel should be of the form
-```julia
-using KernelAbstractions
-@kernel function kernel!(grid, args...)
-    # content
-end
-```
-"""
-function apply!(kernel!, setup, args...; ndrange = nothing)
-    (; grid, backend, workgroupsize) = setup
-    if isnothing(ndrange)
-        ndrange = ntuple(Returns(grid.n), dim(grid))
-    end
-    kernel!(backend, workgroupsize)(grid, args...; ndrange)
-    KernelAbstractions.synchronize(backend)
-    nothing
-end
-
 # Vector field gradient δu[i] / δx[j].
 @inline δ1(g::Grid, u, x, i, j) =
     g.n * (u[x+(i!=j)*e(g, j)|>g, i] - u[x-(i==j)*e(g, j)|>g, i])

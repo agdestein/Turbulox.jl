@@ -9,44 +9,7 @@ using LinearAlgebra
 using Random # For reproducibility
 using StaticArrays # For tensors
 
-"Get value from `Val`."
-getval(::Val{x}) where {x} = x
-
-"Staggered grid of order `o` and dimension `d`."
-struct Grid{o,d}
-    "Number of grid points in each dimension."
-    n::Int
-    Grid(; order = 2, dim = 2, n) = new{order,dim}(n)
-end
-
-"Get order of grid."
-@inline order(::Grid{o,d}) where {o,d} = o
-
-"Get physical dimension."
-@inline dim(::Grid{o,d}) where {o,d} = d
-
-"Get unit index in dimension `i`."
-@inline e(grid, i) = CartesianIndex(ntuple(==(i), dim(grid)))
-
-# Extend index periodically so that it stays within the domain.
-@inline (g::Grid)(i::Integer) = mod1(i, g.n)
-@inline (g::Grid)(x::CartesianIndex) = CartesianIndex(mod1.(x.I, g.n))
-
-get_axis(grid) = range(0, 1, grid.n+1)[2:end]
-
-"""
-Problem setup.
-
-## Kwargs
-
-- `grid::Grid`: Grid setup.
-- `visc::Real`: Viscosity. This value is also used to infer the floating point type, so make sure it is a `Float32` or `Float64`.
-- `backend = CPU()`: KernelAbstractions.jl backend. For Nvidia GPUs, do `using CUDA` and set to `CUDABackend()`.
-- `workgroupsize = 64`: Kernel work group size.
-"""
-problem_setup(; grid, visc, backend = CPU(), workgroupsize = 64) =
-    (; grid, visc, backend, workgroupsize)
-
+include("concept.jl")
 include("initializers.jl")
 include("operators.jl")
 include("tensors.jl")
@@ -54,5 +17,9 @@ include("closures.jl")
 include("time.jl")
 include("filters.jl")
 include("utils.jl")
+
+export Stag, Coll, Grid, order, dim, get_axis, problem_setup, apply!
+export scalarfield, vectorfield, collocated_tensorfield, staggered_tensorfield, randomfield
+export tophat, gaussian, applyfilter!
 
 end

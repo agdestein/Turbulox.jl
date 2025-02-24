@@ -1,10 +1,16 @@
-function gaussian!(ubar, u, Δ, setup)
-    (; backend, workgroupsize, grid) = setup
+"Gaussian filter kernel."
+function gaussian(setup, compression, Δ)
+    (; backend, grid) = setup
     n = grid.n
     d = dim(grid)
     T = typeof(Δ)
-    r = round(Int, 2Δ / 2 * n)
-    # a = (6 / π / Δ^2)^(3 / 2) |> T
+    # Note:
+    #     The standard deviation is σ = Δ / sqrt(12).
+    #     This gives Δ ≈ 3.5σ. At x = Δ, the Gaussian is already quite small,
+    #     and there is point in including points outside this bound.
+    r = round(Int, Δ / 2 * n)
+    r = 2r # Corresponds to x = Δ, sufficient to cover tail
+    @assert isodd(compression)
     w = let
         x = (-r:r) ./ T(n)
         y = reshape(x, 1, :)
@@ -16,46 +22,81 @@ function gaussian!(ubar, u, Δ, setup)
         end
     end
     w = w ./ sum(w) # Normalize
-    w = adapt(backend, w)
+    weights = adapt(backend, w)
     R = ntuple(Returns(r), d) |> splat(CartesianIndex)
-    J = -R:R
-    filter_kernel!(backend, workgroupsize)(grid, ubar, u, w, J; ndrange = size(u))
-    KernelAbstractions.synchronize(backend)
-    ubar, w
+    indices = -R:R # In 3D: (2r+1)^3 points in kernel
+    (; weights, indices, compression)
 end
 
-function tophat!(ubar, u, Δ, setup)
-    (; backend, workgroupsize, grid) = setup
+function tophat(setup, compression, Δ)
+    (; backend, grid) = setup
     n = grid.n
     d = dim(grid)
     T = typeof(Δ)
     h = 1 / n
     r = round(Int, Δ * n / 2)
+    @show r n Δ 2r / n
+    @assert isodd(compression)
     @assert 2r / n ≈ Δ # This ensures that r is the same in every direction
-    # a = (6 / π / Δ^2)^(3 / 2) |> T
     w = fill(T(1) / (2r + 1)^d, ntuple(Returns(2r + 1), d))
-    # @assert sum(w) ≈ 1
-    w = adapt(backend, w)
+    weights = adapt(backend, w)
     R = ntuple(Returns(r), d) |> splat(CartesianIndex)
-    J = -R:R
-    filter_kernel!(backend, workgroupsize)(grid, ubar, u, w, J; ndrange = size(u))
-    KernelAbstractions.synchronize(backend)
-    ubar, w
+    indices = -R:R
+    (; weights, indices, compression)
 end
 
-@kernel function filter_kernel!(g::Grid, ubar, u, w, J)
-    xx = @index(Global, NTuple)
-    d = dim(g)
-    x, i = xx[1:d], xx[d+1:end]
-    X = CartesianIndex(x...)
-    res = zero(eltype(ubar))
-    k = 0
-    while k < length(w)
+@kernel function convolve!(g::Grid, v, u, kernel, offset)
+    x = @index(Global, Cartesian) # Coarse grid index
+    (; weights, indices, compression) = kernel
+    k = 0 # Linear weight index 
+    vx = zero(eltype(v))
+    xfine = compression * x + offset # Fine grid index
+    while k < length(weights)
         k += 1
-        Y = X + J[k]
-        y = mod1.(Y.I, g.n) # Periodic extension
-        Y = CartesianIndex(y..., i...)
-        res += w[k] * u[Y]
+        y = xfine + indices[k] # Translate index
+        y = CartesianIndex(mod1.(y.I, compression * g.n)) # Periodic extension
+        vx += weights[k] * u[y] # Convolution
     end
-    ubar[xx...] = res
+    v[x] = vx
+end
+
+"Filter scalar field."
+function applyfilter!(v, u, setup, filter, compression, Δ)
+    (; backend, workgroupsize, grid) = setup
+    kernel = filter(setup, compression, Δ)
+    r = div(compression, 2)
+    offset = CartesianIndex(ntuple(Returns(-r), dim(grid)))
+    convolve!(backend, workgroupsize)(grid, v, u, kernel, offset; ndrange = size(v))
+    KernelAbstractions.synchronize(backend)
+    kernel
+end
+
+"Filter staggered vector field."
+function applyfilter!(v, u, setup, filter, compression, Δ, ::Stag)
+    (; backend, workgroupsize, grid) = setup
+    d = dim(grid)
+    kernel = filter(setup, compression, Δ)
+    r = div(compression, 2)
+    for i = 1:d
+        offset = CartesianIndex(ntuple(j -> j == i ? 0 : -r, d))
+        vi, ui = selectdim(v, d + 1, i), selectdim(u, d + 1, i)
+        convolve!(backend, workgroupsize)(grid, vi, ui, kernel, offset; ndrange = size(vi))
+    end
+    KernelAbstractions.synchronize(backend)
+    kernel
+end
+
+"Filter staggered tensor field."
+function applyfilter!(v, u, setup, filter, compression, Δ, ::Stag, ::Stag)
+    (; backend, workgroupsize, grid) = setup
+    d = dim(grid)
+    kernel = filter(setup, compression, Δ)
+    r = div(compression, 2)
+    for j = 1:d, i = 1:d
+        offset = CartesianIndex(ntuple(k -> (k == i || k == j) ? 0 : -r, dim(grid)))
+        vi, ui = selectdim(v, d + 1, i, j), selectdim(u, d + 1, i, j)
+        convolve!(backend, workgroupsize)(grid, vi, ui, kernel, offset; ndrange = size(vi))
+    end
+    KernelAbstractions.synchronize(backend)
+    kernel
 end
