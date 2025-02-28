@@ -1,7 +1,7 @@
 "Gaussian filter kernel."
-function gaussian(setup, compression, Δ)
-    (; backend, grid) = setup
-    (; n, L) = grid
+function gaussian(grid, compression, Δ)
+    (; backend) = grid
+    (; L, n, backend) = grid
     d = dim(grid)
     T = typeof(Δ)
     # Note:
@@ -28,9 +28,8 @@ function gaussian(setup, compression, Δ)
     (; weights, indices, compression)
 end
 
-function tophat(setup, compression, Δ)
-    (; backend, grid) = setup
-    (; n, L) = grid
+function tophat(grid, compression, Δ)
+    (; L, n, backend) = grid
     d = dim(grid)
     T = typeof(Δ)
     h = L / n
@@ -60,9 +59,9 @@ end
 end
 
 "Filter scalar field."
-function applyfilter!(v, u, setup, filter, compression, Δ)
-    (; backend, workgroupsize, grid) = setup
-    kernel = filter(setup, compression, Δ)
+function applyfilter!(v, u, grid, filter, compression, Δ)
+    (; backend, workgroupsize) = grid
+    kernel = filter(grid, compression, Δ)
     r = div(compression, 2)
     offset = CartesianIndex(ntuple(Returns(-r), dim(grid)))
     convolve!(backend, workgroupsize)(grid, v, u, kernel, offset; ndrange = size(v))
@@ -71,10 +70,10 @@ function applyfilter!(v, u, setup, filter, compression, Δ)
 end
 
 "Filter staggered vector field."
-function applyfilter!(v, u, setup, filter, compression, Δ, ::Stag)
-    (; backend, workgroupsize, grid) = setup
+function applyfilter!(v, u, grid, filter, compression, Δ, ::Stag)
+    (; backend, workgroupsize) = grid
     d = dim(grid)
-    kernel = filter(setup, compression, Δ)
+    kernel = filter(grid, compression, Δ)
     r = div(compression, 2)
     for i = 1:d
         offset = CartesianIndex(ntuple(j -> j == i ? 0 : -r, d))
@@ -86,15 +85,16 @@ function applyfilter!(v, u, setup, filter, compression, Δ, ::Stag)
 end
 
 "Filter staggered tensor field."
-function applyfilter!(v, u, setup, filter, compression, Δ, ::Stag, ::Stag)
-    (; backend, workgroupsize, grid) = setup
+function applyfilter!(v, u, grid, filter, compression, Δ, ::Stag, ::Stag)
+    (; backend, workgroupsize) = grid
     d = dim(grid)
-    kernel = filter(setup, compression, Δ)
+    @assert d == 3
+    kernel = filter(grid, compression, Δ)
     r = div(compression, 2)
     for j = 1:d, i = 1:d
-        offset = CartesianIndex(ntuple(k -> (k == i || k == j) ? 0 : -r, dim(grid)))
-        vi, ui = selectdim(v, d + 1, i, j), selectdim(u, d + 1, i, j)
-        convolve!(backend, workgroupsize)(grid, vi, ui, kernel, offset; ndrange = size(vi))
+        offset = CartesianIndex(ntuple(k -> (i != j) && (k == i || k == j) ? 0 : -r, dim(grid)))
+        v_ij, u_ij = view(v, :, :, :, i, j), view(u, :, :, :, i, j)
+        convolve!(backend, workgroupsize)(grid, v_ij, u_ij, kernel, offset; ndrange = size(v_ij))
     end
     KernelAbstractions.synchronize(backend)
     kernel

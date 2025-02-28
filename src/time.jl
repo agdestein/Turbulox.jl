@@ -1,14 +1,14 @@
 # Time stepping
 
 "Default right-hand side function (without projection)."
-function default_right_hand_side!(du, u, setup)
+function default_right_hand_side!(du, u, grid, visc)
     fill!(du, 0)
-    apply!(convectiondiffusion!, setup, du, u, setup.visc)
+    apply!(convectiondiffusion!, grid, du, u, visc)
     du
 end
 
 "Perform time step using Wray's third-order scheme."
-function timestep!(f!, u, cache, Δt, solver!, setup)
+function timestep!(f!, u, cache, Δt, solver!, grid)
     (; ustart, du, p) = cache
     T = eltype(u)
 
@@ -34,12 +34,12 @@ function timestep!(f!, u, cache, Δt, solver!, setup)
     copyto!(ustart, u)
 
     for i = 1:nstage
-        f!(du, u, setup)
+        f!(du, u, grid)
 
         # Compute u = project(ustart + Δt * a[i] * du)
         copyto!(u, ustart)
         axpy!(a[i] * Δt, du, u)
-        project!(u, p, solver!, setup)
+        project!(u, p, solver!, grid)
 
         # Compute ustart = ustart + Δt * b[i] * du
         # Skip for last iter
@@ -50,11 +50,9 @@ function timestep!(f!, u, cache, Δt, solver!, setup)
 end
 
 "Get proposed maximum time step for convection and diffusion terms."
-function propose_timestep(u, setup)
-    (; grid, visc) = setup
-    (; n, L) = grid
-    Δt_diff = 1 / (2 * visc * (n / L)^2)
-    Δt_conv = minimum(u -> L / n / abs(u), u)
+function propose_timestep(u, grid, visc)
+    Δt_diff = dx(grid)^2 / 2 / visc
+    Δt_conv = minimum(u -> dx(grid) / abs(u), u)
     Δt = min(Δt_diff, Δt_conv)
     Δt
 end

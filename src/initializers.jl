@@ -1,38 +1,38 @@
 "Allocate empty scalar field."
-scalarfield(setup) = KernelAbstractions.zeros(
-    setup.backend,
-    typeof(setup.grid.L),
-    ntuple(Returns(setup.grid.n), dim(setup.grid)),
+scalarfield(g::Grid) = KernelAbstractions.zeros(
+    g.backend,
+    typeof(g.L),
+    ntuple(Returns(g.n), dim(g)),
 )
 
 "Allocate empty vector field."
-vectorfield(setup) = KernelAbstractions.zeros(
-    setup.backend,
-    typeof(setup.grid.L),
-    ntuple(Returns(setup.grid.n), dim(setup.grid))...,
-    dim(setup.grid),
+vectorfield(g::Grid) = KernelAbstractions.zeros(
+    g.backend,
+    typeof(g.L),
+    ntuple(Returns(g.n), dim(g))...,
+    dim(g),
 )
 
 "Allocate empty tensor field (collocated)."
-function collocated_tensorfield(setup)
-    (; backend, grid) = setup
-    d = dim(grid)
+function collocated_tensorfield(g::Grid)
+    (; L, backend) = g
+    d = dim(g)
     d2 = d * d
-    T = typeof(grid.L)
-    KernelAbstractions.zeros(backend, SMatrix{d,d,T,d2}, ntuple(Returns(grid.n), d))
+    T = typeof(L)
+    KernelAbstractions.zeros(backend, SMatrix{d,d,T,d2}, ntuple(Returns(g.n), d))
 end
 
 "Allocate empty tensor field (staggered)."
-function staggered_tensorfield(setup)
-    (; backend, grid) = setup
-    d = dim(grid)
-    T = typeof(grid.L)
-    KernelAbstractions.zeros(backend, T, ntuple(Returns(grid.n), d)..., d, d)
+function staggered_tensorfield(g::Grid)
+    (; L, n, backend) = g
+    d = dim(g)
+    T = typeof(L)
+    KernelAbstractions.zeros(backend, T, ntuple(Returns(n), d)..., d, d)
 end
 
-function create_spectrum(; setup, kp, rng = Random.default_rng())
-    (; grid, backend) = setup
-    T = typeof(grid.L)
+function create_spectrum(; grid, kp, rng = Random.default_rng())
+    (; L, backend) = grid
+    T = typeof(L)
     d = dim(grid)
     τ = T(2π)
 
@@ -126,18 +126,17 @@ function create_spectrum(; setup, kp, rng = Random.default_rng())
     stack(uhat)
 end
 
-function randomfield(setup, solver!; A = 1, kp = 10, rng = Random.default_rng())
-    (; grid) = setup
+function randomfield(grid, solver!; A = 1, kp = 10, rng = Random.default_rng())
     d = dim(grid)
 
     # Create random velocity field
-    uhat = create_spectrum(; setup, kp, rng)
+    uhat = create_spectrum(; grid, kp, rng)
     u = ifft(uhat, 1:d)
     u = @. A * real(u)
 
     # Make velocity field divergence free on staggered grid
     # (it is already divergence free on the "spectral grid")
-    p = scalarfield(setup)
-    project!(u, p, solver!, setup)
+    p = scalarfield(grid)
+    project!(u, p, solver!, grid)
     u
 end

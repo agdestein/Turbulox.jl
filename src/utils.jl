@@ -1,6 +1,6 @@
-function spectral_stuff(setup; npoint = 100)
-    (; grid, backend, visc) = setup
-    T = typeof(visc)
+function spectral_stuff(grid; npoint = 100)
+    (; L, backend) = grid
+    T = typeof(L)
     d = dim(grid)
 
     N = ntuple(Returns(grid.n), d)
@@ -53,8 +53,7 @@ function spectral_stuff(setup; npoint = 100)
     (; inds, κ, K, uhat, ehat, plan)
 end
 
-function spectrum(u, setup; npoint = 100, stuff = spectral_stuff(setup; npoint))
-    (; grid) = setup
+function spectrum(u, grid; npoint = 100, stuff = spectral_stuff(grid; npoint))
     (; n) = grid
     T = eltype(u)
     d = dim(grid)

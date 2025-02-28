@@ -88,13 +88,13 @@ end
     end
 end
 
-@kernel function velocitygradient_collocated!(grid, ∇u, u)
+@kernel function velocitygradient_coll!(grid, ∇u, u)
     x = @index(Global, Cartesian)
     ∇u[x] = ∇_collocated(grid, u, x)
 end
 
 "Compute ``u v^T`` in the collocated points."
-@kernel function tensorproduct_collocated!(g::Grid, uv, u, v)
+@kernel function tensorproduct_coll!(g::Grid, uv, u, v)
     x = @index(Global, Cartesian)
     if dim(g) == 2
         uvec = SVector(pol(g, u, x, 1, 1), pol(g, u, x, 2, 2))
@@ -112,7 +112,7 @@ end
     if dim(g) == 2
         u11, v11 = pol(g, u, x, 1, 1), pol(g, v, x, 1, 1)
         u12, v12 = pol(g, u, x, 1, 2), pol(g, v, x, 1, 2)
-        u21, v22 = pol(g, u, x, 2, 1), pol(g, v, x, 2, 2)
+        u21, v21 = pol(g, u, x, 2, 1), pol(g, v, x, 2, 2)
         u22, v22 = pol(g, u, x, 2, 2), pol(g, v, x, 2, 2)
         uv[x, 1, 1] = u11 * v11
         uv[x, 2, 1] = u21 * v12
@@ -120,13 +120,13 @@ end
         uv[x, 2, 2] = u22 * v22
     else
         u11, v11 = pol(g, u, x, 1, 1), pol(g, v, x, 1, 1)
-        u12, v12 = pol(g, u, x, 1, 2), pol(g, v, x, 1, 2)
-        u13, v13 = pol(g, u, x, 1, 3), pol(g, v, x, 1, 3)
         u21, v21 = pol(g, u, x, 2, 1), pol(g, v, x, 2, 1)
-        u22, v22 = pol(g, u, x, 2, 2), pol(g, v, x, 2, 2)
-        u23, v23 = pol(g, u, x, 2, 3), pol(g, v, x, 2, 3)
         u31, v31 = pol(g, u, x, 3, 1), pol(g, v, x, 3, 1)
+        u12, v12 = pol(g, u, x, 1, 2), pol(g, v, x, 1, 2)
+        u22, v22 = pol(g, u, x, 2, 2), pol(g, v, x, 2, 2)
         u32, v32 = pol(g, u, x, 3, 2), pol(g, v, x, 3, 2)
+        u13, v13 = pol(g, u, x, 1, 3), pol(g, v, x, 1, 3)
+        u23, v23 = pol(g, u, x, 2, 3), pol(g, v, x, 2, 3)
         u33, v33 = pol(g, u, x, 3, 3), pol(g, v, x, 3, 3)
         uv[x, 1, 1] = u11 * v11
         uv[x, 2, 1] = u21 * v12
@@ -299,7 +299,7 @@ The operation is ``f_i \\leftarrow f_i - ∂_j σ_{i j}``.
         div = f[x, i]
         @unroll for j in dims
             ei, ej = e(g, i), e(g, j)
-            div -= g.n / g.L * (σ[x+(i==j)*ej |> g, i, j] - σ[x-(i!=j)*ej |> g, i, j])
+            div -= (σ[x+(i==j)*ej|>g, i, j] - σ[x-(i!=j)*ej|>g, i, j]) / dx(g)
         end
         f[x, i] = div
     end
@@ -337,7 +337,7 @@ The operation is ``f_i \\leftarrow f_i - ∂_j σ_{i j}``.
                         σ[x+ej|>g][i, j]
                     ) / 4
             end
-            div -= g.n / g.L * (σb - σa)
+            div -= (σb - σa) / dx(g)
         end
         f[x, i] = div
     end

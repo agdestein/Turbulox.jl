@@ -24,15 +24,15 @@ const w10_9 = 35 // 32768
 
 # Vector field gradient δu[i] / δx[j].
 @inline δ1(g::Grid, u, x, i, j) =
-    g.n / g.L * (u[x+(i!=j)*e(g, j)|>g, i] - u[x-(i==j)*e(g, j)|>g, i])
+    (u[x+(i!=j)*e(g, j)|>g, i] - u[x-(i==j)*e(g, j)|>g, i]) / dx(g)
 @inline δ3(g::Grid, u, x, i, j) =
-    g.n / g.L * (u[x+(1+(i!=j))*e(g, j)|>g, i] - u[x-(1+(i==j))*e(g, j)|>g, i]) / 3
+    (u[x+(1+(i!=j))*e(g, j)|>g, i] - u[x-(1+(i==j))*e(g, j)|>g, i]) / 3 / dx(g)
 @inline δ5(g::Grid, u, x, i, j) =
-    g.n / g.L * (u[x+(2+(i!=j))*e(g, j)|>g, i] - u[x-(2+(i==j))*e(g, j)|>g, i]) / 5
+    (u[x+(2+(i!=j))*e(g, j)|>g, i] - u[x-(2+(i==j))*e(g, j)|>g, i]) / 5 / dx(g)
 @inline δ7(g::Grid, u, x, i, j) =
-    g.n / g.L * (u[x+(3+(i!=j))*e(g, j)|>g, i] - u[x-(3+(i==j))*e(g, j)|>g, i]) / 7
+    (u[x+(3+(i!=j))*e(g, j)|>g, i] - u[x-(3+(i==j))*e(g, j)|>g, i]) / 7 / dx(g)
 @inline δ9(g::Grid, u, x, i, j) =
-    g.n / g.L * (u[x+(4+(i!=j))*e(g, j)|>g, i] - u[x-(4+(i==j))*e(g, j)|>g, i]) / 9
+    (u[x+(4+(i!=j))*e(g, j)|>g, i] - u[x-(4+(i==j))*e(g, j)|>g, i]) / 9 / dx(g)
 @inline δ(g::Grid{2}, u, x, i, j) = δ1(g, u, x, i, j)
 @inline δ(g::Grid{4}, u, x, i, j) = w4_1 * δ1(g, u, x, i, j) + w4_3 * δ3(g, u, x, i, j)
 @inline δ(g::Grid{6}, u, x, i, j) =
@@ -50,11 +50,11 @@ const w10_9 = 35 // 32768
     w10_9 * δ9(g, u, x, i, j)
 
 # Scalar field gradient δp / δx[j].
-@inline δ1(g::Grid, p, x, j) = g.n / g.L * (p[x+e(g, j)|>g] - p[x])
-@inline δ3(g::Grid, p, x, j) = g.n / g.L * (p[x+2*e(g, j)|>g] - p[x-1e(g, j)|>g]) / 3
-@inline δ5(g::Grid, p, x, j) = g.n / g.L * (p[x+3*e(g, j)|>g] - p[x-2e(g, j)|>g]) / 5
-@inline δ7(g::Grid, p, x, j) = g.n / g.L * (p[x+4*e(g, j)|>g] - p[x-3e(g, j)|>g]) / 7
-@inline δ9(g::Grid, p, x, j) = g.n / g.L * (p[x+5*e(g, j)|>g] - p[x-4e(g, j)|>g]) / 9
+@inline δ1(g::Grid, p, x, j) = (p[x+e(g, j)|>g] - p[x]) / dx(g)
+@inline δ3(g::Grid, p, x, j) = (p[x+2*e(g, j)|>g] - p[x-1e(g, j)|>g]) / 3 / dx(g)
+@inline δ5(g::Grid, p, x, j) = (p[x+3*e(g, j)|>g] - p[x-2e(g, j)|>g]) / 5 / dx(g)
+@inline δ7(g::Grid, p, x, j) = (p[x+4*e(g, j)|>g] - p[x-3e(g, j)|>g]) / 7 / dx(g)
+@inline δ9(g::Grid, p, x, j) = (p[x+5*e(g, j)|>g] - p[x-4e(g, j)|>g]) / 9 / dx(g)
 @inline δ(g::Grid{2}, p, x, j) = δ1(g, p, x, j)
 @inline δ(g::Grid{4}, p, x, j) = w4_1 * δ1(g, p, x, j) + w4_3 * δ3(g, p, x, j)
 @inline δ(g::Grid{6}, p, x, j) =
@@ -129,7 +129,7 @@ function convterm end
     ui_uj_a = ui_xj_a * uj_xi_a
     ui_uj_b = ui_xj_b * uj_xi_b
 
-    g.n / g.L * (ui_uj_b - ui_uj_a)
+    (ui_uj_b - ui_uj_a) / dx(g)
 end
 
 @inline function convterm(g::Grid{4}, u, x, i, j)
@@ -160,7 +160,7 @@ end
 
     # Divergence of tensor: Lands at canonical position of ui in volume x
     # see  Morinishi 1998 eq. (101)
-    g.n / g.L * (w4_1 * (ui_uj_1b - ui_uj_1a) + w4_3 * (ui_uj_3b - ui_uj_3a) / 3)
+    (w4_1 * (ui_uj_1b - ui_uj_1a) + w4_3 * (ui_uj_3b - ui_uj_3a) / 3) / dx(g)
 end
 
 @inline function convterm(g::Grid{6}, u, x, i, j)
@@ -198,11 +198,11 @@ end
 
     # Divergence of tensor: Lands at canonical position of ui in volume x
     # see  Morinishi 1998 eq. (112)
-    g.n / g.L * (
+    (
         w6_1 * (ui_uj_1b - ui_uj_1a) +
         w6_3 * (ui_uj_3b - ui_uj_3a) / 3 +
         w6_5 * (ui_uj_5b - ui_uj_5a) / 5
-    )
+    ) / dx(g)
 end
 
 @inline function convterm(g::Grid{8}, u, x, i, j)
@@ -247,12 +247,12 @@ end
 
     # Divergence of tensor: Lands at canonical position of ui in volume x
     # coefficient computed in script
-    g.n / g.L * (
+    (
         w8_1 * (ui_uj_1b - ui_uj_1a) +
         w8_3 * (ui_uj_3b - ui_uj_3a) / 3 +
         w8_5 * (ui_uj_5b - ui_uj_5a) / 5 +
         w8_7 * (ui_uj_7b - ui_uj_7a) / 7
-    )
+    ) / dx(g)
 end
 
 @inline function convterm(g::Grid{10}, u, x, i, j)
@@ -304,13 +304,13 @@ end
 
     # Divergence of tensor: Lands at canonical position of ui in volume x
     # coefficient computed in script
-    g.n / g.L * (
+    (
         w10_1 * (ui_uj_1b - ui_uj_1a) +
         w10_3 * (ui_uj_3b - ui_uj_3a) / 3 +
         w10_5 * (ui_uj_5b - ui_uj_5a) / 5 +
         w10_7 * (ui_uj_7b - ui_uj_7a) / 7 +
         w10_9 * (ui_uj_9b - ui_uj_9a) / 9
-    )
+    ) / dx(g)
 end
 
 @inline function diffusionterm(g::Grid, u, x, i, j)
@@ -369,11 +369,11 @@ end
     end
 end
 
-laplace_stencil(g::Grid{2}) = (1, -2, 1) .* (g.n / g.L)^2
-laplace_stencil(g::Grid{4}) = (1, -54, 783, -1460, 783, -54, 1) .// 576 .* (g.n / g.L)^2
+laplace_stencil(g::Grid{2}) = (1, -2, 1) ./ dx(g)^2
+laplace_stencil(g::Grid{4}) = (1, -54, 783, -1460, 783, -54, 1) .// 576 ./ dx(g)^2
 laplace_stencil(g::Grid{6}) =
     (81, -2250, 56125, -603000, 5627250, -10156412, 5627250, -603000, 56125, -2250, 81) .//
-    1920^2 .* (g.n / g.L)^2
+    1920^2 ./ dx(g)^2
 laplace_stencil(g::Grid{8}) =
     (
         25 // 51380224,
@@ -391,7 +391,7 @@ laplace_stencil(g::Grid{8}) =
         15953 // 78643200,
         -7 // 524288,
         25 // 51380224,
-        ) .* (g.n / g.L)^2
+    ) ./ dx(g)^2
 laplace_stencil(g::Grid{10}) =
     (
         1225 // 86973087744,
@@ -413,7 +413,7 @@ laplace_stencil(g::Grid{10}) =
         336897 // 52613349376,
         -225 // 536870912,
         1225 // 86973087744,
-        ) .* (g.n / g.L)^2
+    ) ./ dx(g)^2
 
 "Merge stencil periodically if the stencil is longer than the grid size `n`."
 mergestencil(s, n) =
@@ -426,12 +426,11 @@ mergestencil(s, n) =
         s
     end
 
-"Create spectral Poisson solver from setup."
-function poissonsolver(setup)
-    (; backend, grid, visc) = setup
-    T = typeof(visc)
+"Create spectral Poisson solver from grid."
+function poissonsolver(grid)
+    (; L, n, backend) = grid
+    T = typeof(L)
     d = dim(grid)
-    n = grid.n
 
     # Since we use rfft, the first dimension is halved
     kmax = ntuple(i -> i == 1 ? div(n, 2) + 1 : n, d)
@@ -456,7 +455,7 @@ function poissonsolver(setup)
     # ahat = ntuple(d) do i
     #     k = 0:(kmax[i]-1)
     #     ahat = KernelAbstractions.allocate(backend, T, kmax[i])
-    #     @. ahat = 4 * (n / grid.L)^2 * sinpi(k / n)^2
+    #     @. ahat = 4 / dx(grid)^2 * sinpi(k / n)^2
     #     ahat
     # end
 
@@ -505,15 +504,15 @@ pressuregradient!
 end
 
 "Project velocity field onto divergence-free space."
-function project!(u, p, poissonsolve!, setup)
+function project!(u, p, poissonsolve!, grid)
     # Divergence of tentative velocity field
-    apply!(divergence!, setup, p, u)
+    apply!(divergence!, grid, p, u)
 
     # Solve the Poisson equation
     poissonsolve!(p)
 
     # Apply pressure correction term
-    apply!(pressuregradient!, setup, u, p)
+    apply!(pressuregradient!, grid, u, p)
 
     u
 end
@@ -536,14 +535,13 @@ Get the following dimensional scale numbers [popeTurbulentFlows2000](@cite):
 - Integral length scale ``L = \\frac{3 \\pi}{2 u_\\text{avg}^2} \\int_0^\\infty \\frac{E(k)}{k} \\, \\mathrm{d} k``
 - Large-eddy turnover time ``\\tau = \\frac{L}{u_\\text{avg}}``
 """
-function get_scale_numbers(u, setup)
-    (; grid, visc) = setup
+function get_scale_numbers(u, grid, visc)
     (; n) = grid
     d = dim(grid)
     T = eltype(u)
     uavg = sqrt(sum(abs2, u) / length(u))
-    ϵ_field = scalarfield(setup)
-    apply!(dissipation!, setup, ϵ_field, u, setup.visc)
+    ϵ_field = scalarfield(grid)
+    apply!(dissipation!, grid, ϵ_field, u, visc)
     ϵ = sum(ϵ_field) / length(ϵ_field)
     eta = (visc^3 / ϵ)^T(1 / 4)
     λ = sqrt(5 * visc / ϵ) * uavg

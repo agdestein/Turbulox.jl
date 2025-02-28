@@ -7,12 +7,12 @@ end
 """
 Clark's gradient model [clarkEvaluationSubgridscaleModels1979](@cite).
 """
-function clark_model(setup, Δ)
-    τ = collocated_tensorfield(setup)
+function clark_model(grid, Δ)
+    τ = collocated_tensorfield(grid)
     function closure!(force, u)
-        apply!(velocitygradient_collocated!, setup, τ, u)
-        apply!(clark_tensor!, setup, τ, Δ)
-        apply!(tensordivergence_collocated!, setup, force, τ)
+        apply!(velocitygradient_coll!, grid, τ, u)
+        apply!(clark_tensor!, grid, τ, Δ)
+        apply!(tensordivergence_collocated!, grid, force, τ)
     end
 end
 
@@ -39,7 +39,7 @@ Subtract result from existing force field `f`.
                 s_a = (∇u[x-ej|>g, i, j] + ∇u[x-ej|>g, j, i]) / 2
                 s_b = (∇u[x, i, j] + ∇u[x, j, i]) / 2
             end
-            div += 2 * g.n / g.L * (s_b * nu_b - s_a * nu_a)
+            div += 2 * (s_b * nu_b - s_a * nu_a) / dx(g)
         end
         f[x, i] = div
     end
@@ -53,13 +53,13 @@ end
 end
 
 "Eddy viscosity closure model."
-function eddyviscosity_model(viscosity!, setup, C, Δ)
-    ∇u = staggered_tensorfield(setup)
-    visc = scalarfield(setup)
+function eddyviscosity_model(viscosity!, grid, C, Δ)
+    ∇u = staggered_tensorfield(grid)
+    visc = scalarfield(grid)
     function closure!(force, u)
-        apply!(velocitygradient!, setup, ∇u, u)
-        apply!(viscosity!, setup, visc, ∇u, C, Δ)
-        apply!(eddyviscosity_closure!, setup, force, visc, ∇u)
+        apply!(velocitygradient!, grid, ∇u, u)
+        apply!(viscosity!, grid, visc, ∇u, C, Δ)
+        apply!(eddyviscosity_closure!, grid, force, visc, ∇u)
         force
     end
 end
