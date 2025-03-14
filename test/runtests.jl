@@ -101,6 +101,10 @@ end
         Turbulox.apply!(Turbulox.smagorinsky_viscosity!, setup, visc, ∇u, 0.17, Δ)
         @test all(>(0), visc)
     end
+    @testset "WALE" begin
+        Turbulox.apply!(Turbulox.wale_viscosity!, setup, visc, ∇u, 0.569, Δ)
+        @test all(>(0), visc)
+    end
     @testset "Vreman" begin
         Turbulox.apply!(Turbulox.vreman_viscosity!, setup, visc, ∇u, 0.28, Δ)
         @test all(>(0), visc)

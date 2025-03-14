@@ -87,6 +87,25 @@ Proposed value for `C` is 0.17.
 end
 
 """
+Compute WALE [nicoudSubgridScaleStressModelling1999,triasBuildingProperInvariants2015](@cite).
+Proposed value for `C` is 0.569.
+"""
+@kernel function wale_viscosity!(g::Grid, visc, ∇u, C, Δ)
+    T = eltype(visc)
+    x = @index(Global, Cartesian)
+    G = pol_tensor_collocated(g, ∇u, x)
+    S = (G + G') / 2
+    Ω = (G - G') / 2
+    QG = -tr(G * G) / 2
+    QS = -tr(S * S) / 2
+    QΩ = -tr(Ω * Ω) / 2
+    V2 = 4 * (tr(S * S * Ω * Ω) − 2 * QS * QΩ)
+    visc[x] =
+        (C * Δ)^2 * (V2 / 2 + 2 * QG^2 / 3)^T(3 / 2) /
+        ((-2 * QS)^T(5 / 2) + (V2 / 2 + 2 * QG^2 / 3)^T(5 / 4))
+end
+
+"""
 Compute Vreman's eddy viscosity [vremanEddyviscositySubgridscaleModel2004,triasBuildingProperInvariants2015](@cite).
 Proposed value for `C` is 0.28.
 """
