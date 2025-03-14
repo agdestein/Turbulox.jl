@@ -20,10 +20,10 @@ end
 end
 
 @testitem "Consistency of weights" begin
-    (; w4_1, w4_3) = Turbulox
-    (; w6_1, w6_3, w6_5) = Turbulox
-    (; w8_1, w8_3, w8_5, w8_7) = Turbulox
-    (; w10_1, w10_3, w10_5, w10_7, w10_9) = Turbulox
+    using Turbulox: w4_1, w4_3
+    using Turbulox: w6_1, w6_3, w6_5
+    using Turbulox: w8_1, w8_3, w8_5, w8_7
+    using Turbulox: w10_1, w10_3, w10_5, w10_7, w10_9
     # Use equality, since weights are rational
     @test w4_1 + w4_3 == 1
     @test w6_1 + w6_3 + w6_5 == 1
@@ -32,9 +32,10 @@ end
 end
 
 @testitem "Consistency of Laplace stencils" begin
+    using Turbulox: laplace_stencil
     for order in [2, 4, 6, 8, 10]
-        g = Turbulox.Grid(; order, dim = 3, L = 1.0, n = 16)
-        stencil = Turbulox.laplace_stencil(g)
+        g = Grid(; order, dim = 3, L = 1.0, n = 16)
+        stencil = laplace_stencil(g)
         # Use equality, since weights are rational
         @test sum(stencil) ≈ 0 atol = 1e-12 # Constant functions
         @test sum(eachindex(stencil) .* stencil) ≈ 0 atol = 1e-12 # Linear functions
@@ -43,14 +44,13 @@ end
 
 @testitem "Pressure projection" begin
     for order in [2, 4, 6, 8, 10]
-        grid = Turbulox.Grid(; order, dim = 3, L = 1.0, n = 16)
-        setup = Turbulox.problem_setup(; grid, visc = 1e-3)
-        solver! = Turbulox.poissonsolver(setup)
+        grid = Grid(; order, dim = 3, L = 1.0, n = 16)
+        solver! = poissonsolver(grid)
         u = randn(grid.n, grid.n, grid.n, 3)
-        p = Turbulox.scalarfield(setup)
-        Turbulox.project!(u, p, solver!, setup)
-        div = Turbulox.scalarfield(setup)
-        Turbulox.apply!(Turbulox.divergence!, setup, div, u)
+        p = scalarfield(grid)
+        project!(u, p, solver!, grid)
+        div = scalarfield(grid)
+        apply!(divergence!, grid, div, u)
         @test maximum(abs, div) < 1e-12
     end
 end
@@ -58,16 +58,15 @@ end
 @testitem "(Skew-)symmetry of operators" begin
     using LinearAlgebra
     for order in [2, 4, 6, 8, 10]
-        grid = Turbulox.Grid(; order, dim = 3, L = 1.0, n = 16)
-        setup = Turbulox.problem_setup(; grid, visc = 1e-3)
-        solver! = Turbulox.poissonsolver(setup)
-        u = Turbulox.randomfield(setup, solver!)
+        grid = Grid(; order, dim = 3, L = 1.0, n = 16)
+        solver! = poissonsolver(grid)
+        u = randomfield(grid, solver!)
 
         # Check that the convection operator is skew-symmetric
         # for a divergence-free field
-        u = Turbulox.randomfield(setup, solver!) # Divergence-free
+        u = randomfield(grid, solver!) # Divergence-free
         du = zero(u)
-        Turbulox.apply!(Turbulox.convection!, setup, du, u)
+        apply!(convection!, grid, du, u)
         dE = dot(u, du) / grid.n^3
         @test abs(dE) < 1e-12
 
@@ -76,45 +75,51 @@ end
         # (see Morinishi et al. 1998)
         u = randn(grid.n, grid.n, grid.n, 3) # Non-divergence-free
         du = zero(u)
-        Turbulox.apply!(Turbulox.convection!, setup, du, u)
+        apply!(convection!, grid, du, u)
         dE = dot(u, du) / grid.n^3
         @test abs(dE) > 1e-12
 
         # Check that the diffusion operator is dissipative
         u = randn(grid.n, grid.n, grid.n, 3) # Non-divergence-free
         du = zero(u)
-        Turbulox.apply!(Turbulox.diffusion!, setup, du, u, setup.visc)
+        apply!(diffusion!, grid, du, u, 1e-3)
         dE = dot(u, du) / grid.n^3
         @test dE < 0
     end
 end
 
 @testitem "Eddy viscosity" begin
-    grid = Turbulox.Grid(; order = 2, dim = 3, L = 1.0, n = 16)
-    setup = Turbulox.problem_setup(; grid, visc = 1e-3)
+    using Turbulox: velocitygradient!
+    using Turbulox:
+        smagorinsky_viscosity!,
+        wale_viscosity!,
+        vreman_viscosity!,
+        verstappen_viscosity!,
+        nicoud_viscosity!
+    grid = Grid(; order = 2, dim = 3, L = 1.0, n = 16)
     u = randn(grid.n, grid.n, grid.n, 3)
-    ∇u = Turbulox.staggered_tensorfield(setup)
-    visc = Turbulox.scalarfield(setup)
-    Turbulox.apply!(Turbulox.velocitygradient!, setup, ∇u, u)
+    ∇u = staggered_tensorfield(grid)
+    visc = scalarfield(grid)
+    apply!(velocitygradient!, grid, ∇u, u)
     Δ = 1 / grid.n
     @testset "Smagorinsky" begin
-        Turbulox.apply!(Turbulox.smagorinsky_viscosity!, setup, visc, ∇u, 0.17, Δ)
+        apply!(smagorinsky_viscosity!, grid, visc, ∇u, 0.17, Δ)
         @test all(>(0), visc)
     end
     @testset "WALE" begin
-        Turbulox.apply!(Turbulox.wale_viscosity!, setup, visc, ∇u, 0.569, Δ)
+        apply!(wale_viscosity!, grid, visc, ∇u, 0.569, Δ)
         @test all(>(0), visc)
     end
     @testset "Vreman" begin
-        Turbulox.apply!(Turbulox.vreman_viscosity!, setup, visc, ∇u, 0.28, Δ)
+        apply!(vreman_viscosity!, grid, visc, ∇u, 0.28, Δ)
         @test all(>(0), visc)
     end
     @testset "Verstappen" begin
-        Turbulox.apply!(Turbulox.verstappen_viscosity!, setup, visc, ∇u, 0.345, Δ)
+        apply!(verstappen_viscosity!, grid, visc, ∇u, 0.345, Δ)
         @test all(>(0), visc)
     end
     @testset "Nicoud" begin
-        Turbulox.apply!(Turbulox.nicoud_viscosity!, setup, visc, ∇u, 1.35, Δ)
+        apply!(nicoud_viscosity!, grid, visc, ∇u, 1.35, Δ)
         @test all(>(0), visc)
     end
 end

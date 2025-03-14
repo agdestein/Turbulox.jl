@@ -169,10 +169,10 @@ end
 "Compute Pope's tensor basis [popeTurbulentFlows2000](@cite)."
 tensorbasis
 
-@inline function tensorbasis(::Grid{o,2}, ∇u) where {o}
+@inline function tensorbasis(g::Grid{o,2}, ∇u) where {o}
     S = (∇u + ∇u') / 2
     R = (∇u - ∇u') / 2
-    idtensor(grid), S, S * R - R * S
+    idtensor(g), S, S * R - R * S
 end
 
 @inline function tensorbasis(g::Grid{o,3}, ∇u) where {o}
