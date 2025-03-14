@@ -1,9 +1,6 @@
 "Allocate empty scalar field."
-scalarfield(g::Grid) = KernelAbstractions.zeros(
-    g.backend,
-    typeof(g.L),
-    ntuple(Returns(g.n), dim(g)),
-)
+scalarfield(g::Grid) =
+    KernelAbstractions.zeros(g.backend, typeof(g.L), ntuple(Returns(g.n), dim(g)))
 
 "Allocate empty vector field."
 vectorfield(g::Grid) = KernelAbstractions.zeros(
