@@ -37,13 +37,12 @@ function timestep!(f!, u, cache, Δt, solver!, grid)
         f!(du, u, grid)
 
         # Compute u = project(ustart + Δt * a[i] * du)
-        copyto!(u, ustart)
+        i == 1 || copyto!(u, ustart) # Skip first iter
         axpy!(a[i] * Δt, du, u)
         project!(u, p, solver!, grid)
 
         # Compute ustart = ustart + Δt * b[i] * du
-        # Skip for last iter
-        i == nstage || axpy!(b[i] * Δt, du, ustart)
+        i == nstage || axpy!(b[i] * Δt, du, ustart) # Skip last iter
     end
 
     u
@@ -51,7 +50,7 @@ end
 
 "Get proposed maximum time step for convection and diffusion terms."
 function propose_timestep(u, grid, visc)
-    Δt_diff = dx(grid)^2 / 2 / visc
+    Δt_diff = dx(grid)^2 / dim(grid) / 2 / visc
     Δt_conv = minimum(u -> dx(grid) / abs(u), u)
     Δt = min(Δt_diff, Δt_conv)
     Δt
