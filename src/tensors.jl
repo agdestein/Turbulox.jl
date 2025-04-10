@@ -169,27 +169,29 @@ end
 "Compute Pope's tensor basis [popeTurbulentFlows2000](@cite)."
 tensorbasis
 
+"Compute deviatoric part of a tensor."
+deviator(σ) = σ - tr(σ) / 3 * oneunit(σ)
+
 @inline function tensorbasis(g::Grid{o,2}, ∇u) where {o}
     S = (∇u + ∇u') / 2
     R = (∇u - ∇u') / 2
-    idtensor(g), S, S * R - R * S
+    oneunit(S), S, S * R - R * S
 end
 
 @inline function tensorbasis(g::Grid{o,3}, ∇u) where {o}
     T = eltype(∇u)
     S = (∇u + ∇u') / 2
     R = (∇u - ∇u') / 2
-    I = idtensor(g)
     (
         S,
         S * R - R * S,
-        S * S - tr(S * S) / 3 * I,
-        R * R - tr(R * R) / 3 * I,
+        deviator(S * S),
+        deviator(R * R),
         R * S * S - S * S * R,
-        S * R * R + R * R * S - T(2) / 3 * tr(S * R * R) * I,
+        deviator(S * R * R + R * R * S),
         R * S * R * R - R * R * S * R,
         S * R * S * S - S * S * R * S,
-        R * R * S * S + S * S * R * R - T(2) / 3 * tr(S * S * R * R) * I,
+        deviator(R * R * S * S + S * S * R * R),
         R * S * S * R * R - R * R * S * S * R,
     )
 end
