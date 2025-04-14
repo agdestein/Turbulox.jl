@@ -54,7 +54,7 @@ end
 
 "Eddy viscosity closure model."
 function eddyviscosity_model(viscosity!, grid, C, Δ)
-    ∇u = staggered_tensorfield(grid)
+    ∇u = tensorfield(grid)
     visc = scalarfield(grid)
     function closure!(force, u)
         apply!(velocitygradient!, grid, ∇u, u)

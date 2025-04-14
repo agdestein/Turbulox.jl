@@ -20,7 +20,7 @@ function collocated_tensorfield(g::Grid)
 end
 
 "Allocate empty tensor field (staggered)."
-function staggered_tensorfield(g::Grid)
+function tensorfield(g::Grid)
     (; L, n, backend) = g
     d = dim(g)
     T = typeof(L)
@@ -28,7 +28,7 @@ function staggered_tensorfield(g::Grid)
 end
 
 "Allocate empty tensor field (symmetric, staggered)."
-function symmetric_staggered_tensorfield(g::Grid)
+function symmetric_tensorfield(g::Grid)
     (; L, n, backend) = g
     d = dim(g)
     T = typeof(L)

@@ -98,7 +98,7 @@ end
         nicoud_viscosity!
     grid = Grid(; order = 2, dim = 3, L = 1.0, n = 16)
     u = randn(grid.n, grid.n, grid.n, 3)
-    ∇u = staggered_tensorfield(grid)
+    ∇u = tensorfield(grid)
     visc = scalarfield(grid)
     apply!(velocitygradient!, grid, ∇u, u)
     Δ = 1 / grid.n
