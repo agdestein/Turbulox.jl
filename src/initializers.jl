@@ -27,6 +27,15 @@ function staggered_tensorfield(g::Grid)
     KernelAbstractions.zeros(backend, T, ntuple(Returns(n), d)..., d, d)
 end
 
+"Allocate empty tensor field (symmetric, staggered)."
+function symmetric_staggered_tensorfield(g::Grid)
+    (; L, n, backend) = g
+    d = dim(g)
+    T = typeof(L)
+    ndof = d == 2 ? 3 : 6
+    KernelAbstractions.zeros(backend, T, ntuple(Returns(n), d)..., ndof)
+end
+
 function create_spectrum(; grid, kp, rng = Random.default_rng())
     (; L, backend) = grid
     T = typeof(L)

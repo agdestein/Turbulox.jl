@@ -31,4 +31,5 @@ find_laplacian(find_stencil(2))
 find_laplacian(find_stencil(3))
 find_laplacian(find_stencil(4))
 find_laplacian(find_stencil(5))
+
 find_laplacian(find_stencil(5)) * 1.0 .|> x -> round(x; digits = 4)

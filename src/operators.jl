@@ -114,6 +114,43 @@ divergence!
     div[x] = divx
 end
 
+
+"Get convection-diffusion stress tensor component `i,j`."
+@inline function stress(g::Grid, u, x, i, j, visc)
+    # Non-linear stress
+    ui_xj = pol(g, u, x, i, j)
+    uj_xi = pol(g, u, x, j, i)
+    ui_uj = ui_xj * uj_xi
+
+    # Strain-rate
+    δj_ui = δ(g, u, x, i, j)
+    δi_uj = δ(g, u, x, j, i)
+    sij = (δj_ui + δi_uj) / 2
+
+    # Resulting stress
+    ui_uj - 2 * visc * sij
+end
+
+@kernel function stresstensor!(g::Grid, r, u, visc)
+    x = @index(Global, Cartesian)
+    r[x, 1, 1] = stress(g, u, x, 1, 1, visc)
+    r[x, 2, 2] = stress(g, u, x, 2, 2, visc)
+    r[x, 3, 3] = stress(g, u, x, 3, 3, visc)
+    r[x, 1, 2] = r[x, 2, 1] = stress(g, u, x, 1, 2, visc)
+    r[x, 1, 3] = r[x, 3, 1] = stress(g, u, x, 1, 3, visc)
+    r[x, 2, 3] = r[x, 3, 2] = stress(g, u, x, 2, 3, visc)
+end
+
+@kernel function stresstensor_symm!(g::Grid, r, u, visc)
+    x = @index(Global, Cartesian)
+    r[x, 1] = stress(g, u, x, 1, 1, visc)
+    r[x, 2] = stress(g, u, x, 2, 2, visc)
+    r[x, 3] = stress(g, u, x, 3, 3, visc)
+    r[x, 4] = stress(g, u, x, 1, 2, visc)
+    r[x, 5] = stress(g, u, x, 1, 3, visc)
+    r[x, 6] = stress(g, u, x, 2, 3, visc)
+end
+
 "Approximate the convective force ``\\partial_j (u_i u_j)``."
 function convterm end
 

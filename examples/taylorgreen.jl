@@ -9,47 +9,50 @@ using KernelAbstractions
 using LinearAlgebra
 using Random
 using Turbulox
-using WGLMakie
+using GLMakie
 using WriteVTK
 
 set_theme!(theme_dark())
 
-T = Float32
-# T = Float64
+# T = Float32
+T = Float64
 f = T(1)
 
+# backend = KernelAbstractions.CPU()
 backend = CUDABackend()
 
-visc = 1 / 50_000 |> T
+visc = 1 / 2_000 |> T
 
 # Initial conditions
-Ux(x, y, z) = sinpi(1x) * cospi(1y) * sinpi(1z) / 2
-Uy(x, y, z) = -cospi(1x) * sinpi(1y) * sinpi(1z) / 2
+Ux(x, y, z) = sinpi(2x) * cospi(2y) * sinpi(2z) / 2
+Uy(x, y, z) = -cospi(2x) * sinpi(2y) * sinpi(2z) / 2
 Uz(x, y, z) = zero(x)
 
-grid = Turbulox.Grid(; order = 4, dim = 3, n = 256);
-setup = Turbulox.problem_setup(; grid, visc, backend);
-solver! = Turbulox.poissonsolver(setup);
+grid = Turbulox.RGrid(; order = 2, dim = 3, n = 128, backend);
+solver! = Turbulox.poissonsolver(grid);
 
-u = Turbulox.vectorfield(setup);
+u = Turbulox.vectorfield(grid);
 cache = (;
-    ustart = Turbulox.vectorfield(setup),
-    du = Turbulox.vectorfield(setup),
-    p = Turbulox.scalarfield(setup),
+    ustart = Turbulox.vectorfield(grid),
+    du = Turbulox.vectorfield(grid),
+    p = Turbulox.scalarfield(grid),
 );
 
 # Initialize
 x = range(0f, 1f, grid.n + 1)[2:end];
+Δx = x[2] - x[1];
+x = x .- Δx / 2;
 y = reshape(x, 1, :);
 z = reshape(x, 1, 1, :);
 Δx = x[2] - x[1];
-xp = x .- Δx / 2;
+xp = x
+# xp = x .- Δx / 2;
 yp = reshape(xp, 1, :);
 zp = reshape(xp, 1, 1, :);
 u[:, :, :, 1] .= Ux.(x, yp, zp);
 u[:, :, :, 2] .= Uy.(xp, y, zp);
 u[:, :, :, 3] .= Uz.(xp, yp, z);
-Turbulox.project!(u, cache.p, solver!, setup);
+Turbulox.project!(u, cache.p, solver!, grid);
 
 "Compute ``z``-component of vorticity in the plane ``z=z``."
 @kernel function vort_z(grid, ω, u, z)
@@ -60,17 +63,16 @@ Turbulox.project!(u, cache.p, solver!, setup);
     ω[x, y] = -δux_δy + δuy_δx
 end
 
-fig, ω_obs = let
-    ω = KernelAbstractions.zeros(backend, T, grid.n, grid.n)
-    Turbulox.apply!(vort_z, setup, ω, u, grid.n ÷ 4)
-    ω_obs = Observable(Array(ω))
+fig, ω_obs, ω = let
+    ω_obs = Observable(Array(u[:, :, 1, 1]))
     colorrange = lift(ω_obs) do ω
         r = maximum(abs, ω)
         -r, r
     end
-    fig, ax, hm = image(
+    # fig, ax, hm = image(
+    fig, ax, hm = heatmap(
         ω_obs;
-        colorrange = (-5, 5),
+        # colorrange = (-7, 7),
         colormap = :seaborn_icefire_gradient,
         axis = (
             # title = "Vorticity ω_z",
@@ -84,42 +86,130 @@ fig, ω_obs = let
         ),
         figure = (; size = (600, 600)),
     )
-    # Colorbar(fig[1, 2], hm)
-    fig, ω_obs
+    Colorbar(fig[1, 2], hm)
+    fig, ω_obs, ω
 end
+fig
+
+fig, ω_obs, ω = let
+    ω = KernelAbstractions.zeros(backend, T, grid.n, grid.n)
+    Turbulox.apply!(vort_z, grid, ω, u, grid.n ÷ 4)
+    ω_obs = Observable(Array(ω))
+    colorrange = lift(ω_obs) do ω
+        r = maximum(abs, ω)
+        -r, r
+    end
+    # fig, ax, hm = image(
+    fig, ax, hm = heatmap(
+        ω_obs;
+        # colorrange = (-7, 7),
+        colormap = :seaborn_icefire_gradient,
+        axis = (
+            # title = "Vorticity ω_z",
+            # xlabel = "x",
+            # ylabel = "y",
+            xticksvisible = false,
+            xticklabelsvisible = false,
+            yticksvisible = false,
+            yticklabelsvisible = false,
+            aspect = DataAspect(),
+        ),
+        figure = (; size = (600, 600)),
+    )
+    Colorbar(fig[1, 2], hm)
+    fig, ω_obs, ω
+end
+fig
 
 v = copy(u);
-# u = v;
+copyto!(u, v);
 
-stream = VideoStream(fig; visible = true);
+# usmag = copy(u)
 
-t = 0f
-i = 0
-tmax = 50f
-while t < tmax
-    i += 1
-    Δt = T(0.85) * Turbulox.propose_timestep(u, setup)
-    Δt = min(Δt, tmax - t)
-    Turbulox.timestep!(Turbulox.default_right_hand_side!, u, cache, Δt, solver!, setup)
-    t += Δt
-    @show t
-    if i % 20 == 0
-        Turbulox.apply!(vort_z, setup, ω, u, grid.n ÷ 4)
-        ω_obs[] = copyto!(ω_obs[], ω)
-        recordframe!(stream)
+# stream = VideoStream(fig; visible = true);
+
+closure! = Turbulox.clark_model(grid, T(1 / grid.n));
+closure! = Turbulox.eddyviscosity_model(
+    Turbulox.smagorinsky_viscosity!,
+    grid,
+    T(0.17),
+    T(1 / grid.n),
+);
+closure! =
+    Turbulox.eddyviscosity_model(Turbulox.vreman_viscosity!, grid, T(0.28), T(1 / grid.n));
+closure! = Turbulox.eddyviscosity_model(
+    Turbulox.verstappen_viscosity!,
+    grid,
+    T(0.345),
+    T(1 / grid.n),
+);
+closure! =
+    Turbulox.eddyviscosity_model(Turbulox.nicoud_viscosity!, grid, T(1.35), T(1 / grid.n));
+
+du = zero(u);
+closure!(du, u);
+
+function rhs!(du, u, grid)
+    fill!(du, 0)
+    Turbulox.apply!(Turbulox.convectiondiffusion!, grid, du, u, visc)
+    # closure!(du, u)
+end
+
+CUDA.@profile rhs!(du, u, grid)
+@profview (rhs!(du, u, grid); KernelAbstractions.synchronize(backend))
+
+let
+    copyto!(u, v)
+    t = 0f
+    i = 0
+    tmax = 20f
+    n0 = norm(u)
+    while t < tmax
+        i += 1
+        Δt = T(0.85) * Turbulox.propose_timestep(u, grid)
+        Δt = min(Δt, tmax - t)
+        # Δt = T(0.01)
+        Turbulox.timestep!(rhs!, u, cache, Δt, solver!, grid)
+        t += Δt
+        @show t
+        if i % 1 == 0
+            nn = norm(u)
+            nn > 2 * n0 && break
+            Turbulox.apply!(vort_z, grid, ω, u, grid.n ÷ 4)
+            # ω_obs[] = copyto!(ω_obs[], ω)
+            ω_obs[] = copyto!(ω_obs[], u[:, :, 1, 1])
+            sleep(0.01)
+            # recordframe!(stream)
+        end
     end
 end
 
-save("taylorgreen_onevortex.mp4", stream)
+save("taylorgreen_order=$(Turbulox.order(grid))_n=$(grid.n).mp4", stream)
 
-ubar = Turbulox.vectorfield(setup);
-∇u = Turbulox.collocated_tensorfield(setup);
-q = Turbulox.scalarfield(setup);
-r = Turbulox.scalarfield(setup);
-Turbulox.gaussian!(ubar, u, T(1 / 50), setup);
-Turbulox.apply!(Turbulox.velocitygradient_collocated!, setup, ∇u, u);
-# Turbulox.apply!(Turbulox.velocitygradient!, setup, ∇u, ubar);
-Turbulox.apply!(Turbulox.compute_qr!, setup, q, r, ∇u);
+s = Turbulox.get_scale_numbers(u, grid, visc)
+
+let
+    stuff = Turbulox.spectral_stuff(grid)
+    spec = Turbulox.spectrum(usmag, grid; stuff)
+    fig = Figure()
+    ax = Axis(fig[1, 1]; xscale = log10, yscale = log10)
+    lines!(ax, Point2f.(spec.κ, spec.s))
+    xslope = spec.κ[10:end]
+    yslope = @. 1.58 * s.ϵ^(2 / 3) * (π * xslope)^(-5 / 3)
+    lines!(ax, xslope, yslope; color = Cycled(2))
+    vlines!(ax, 1 / s.L / 1)
+    vlines!(ax, 1 / s.λ / 1)
+    display(GLMakie.Screen(), fig)
+end
+
+ubar = Turbulox.vectorfield(grid);
+∇u = Turbulox.collocated_tensorfield(grid);
+q = Turbulox.scalarfield(grid);
+r = Turbulox.scalarfield(grid);
+Turbulox.gaussian!(ubar, u, T(1 / 50), grid);
+Turbulox.apply!(Turbulox.velocitygradient_coll!, grid, ∇u, u);
+# Turbulox.apply!(Turbulox.velocitygradient!, grid, ∇u, ubar);
+Turbulox.apply!(Turbulox.compute_qr!, grid, q, r, ∇u);
 
 q
 r
@@ -149,15 +239,47 @@ let
     heatmap!(
         ax,
         Q;
-        colorrange = (0, 1),
+        colorrange = (0.10, 5),
         # lowclip = :transparent,
     )
     fig
 end
 
+volume(q |> Array; clip_planes = [Plane3f(Vec3f(0, 1, 1), 50)])
+
+contour(
+    q |> Array;
+    colormap = :inferno,
+    figure = (; size = (800, 800)),
+    colorrange = (0.1, 5),
+    alpha = 0.5,
+    levels = range(0.1, 5, 10),
+    isorange = 0.4,
+    # lowclip = :transparent,
+)
+
+volume(
+    q |> Array;
+    colormap = :inferno,
+    # colormap = Reverse(:inferno),
+    figure = (; size = (800, 800)),
+    algorithm = :iso, # IsoValue
+    # algorithm = :absorption, # Absorption
+    # algorithm = :mip, # MaximumIntensityProjection
+    # algorithm = :absorptionrgba, # AbsorptionRGBA
+    # algorithm = :additive, # AdditiveRGBA
+    # algorithm = :indexedabsorption, # IndexedAbsorptionRGBA
+    isorange = 1.0,
+    isovalue = 10,
+    # absorption=50f0,
+    colorrange = (0.1, 5),
+    # colorrange = (-0.1, -5),
+    # lowclip = :transparent,
+)
+
 Q[] = copyto!(Q[], view(q, :, 220, :))
 
-s = Turbulox.get_scale_numbers(u, setup)
+s = Turbulox.get_scale_numbers(u, grid, visc)
 
 let
     rstar = r |> Array |> vec

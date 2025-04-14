@@ -1,3 +1,22 @@
+"Copy symmtric tensor to normal tensor"
+desymmetrize!(::Grid{o,2}, r, rsym) where {o} =  @. begin
+    r[:, :, 1, 1] = rsym[:, :, 1]
+    r[:, :, 2, 2] = rsym[:, :, 2]
+    r[:, :, 1, 2] = rsym[:, :, 3]
+    r[:, :, 2, 1] = rsym[:, :, 3]
+end
+desymmetrize!(::Grid{o,3}, r, rsym) where {o} =  @. begin
+    r[:, :, :, 1, 1] = rsym[:, :, :, 1]
+    r[:, :, :, 2, 2] = rsym[:, :, :, 2]
+    r[:, :, :, 3, 3] = rsym[:, :, :, 3]
+    r[:, :, :, 1, 2] = rsym[:, :, :, 4]
+    r[:, :, :, 2, 1] = rsym[:, :, :, 4]
+    r[:, :, :, 1, 3] = rsym[:, :, :, 5]
+    r[:, :, :, 3, 1] = rsym[:, :, :, 5]
+    r[:, :, :, 2, 3] = rsym[:, :, :, 6]
+    r[:, :, :, 3, 2] = rsym[:, :, :, 6]
+end
+
 "Interpolate staggered tensor to volume centers."
 @inline function pol_tensor_collocated(g::Grid{o,2}, σ, x) where {o}
     e1, e2 = e(g, 1), e(g, 2)
@@ -340,6 +359,30 @@ The operation is ``f_i \\leftarrow f_i - ∂_j σ_{i j}``.
                     ) / 4
             end
             div -= (σb - σa) / dx(g)
+        end
+        f[x, i] = div
+    end
+end
+
+"Divergence first, then interpolate"
+@kernel function tensordivergence_collocated_2!(g::Grid, f, σ)
+    x = @index(Global, Cartesian)
+    dims = 1:dim(g)
+    @unroll for i in dims
+        div = f[x, i] # add closure to existing force
+        @unroll for j in dims
+            ei, ej = e(g, i), e(g, j)
+            if i == j
+                div -= (σ[x+ej|>g][i, j] - σ[x][i, j]) / dx(g)
+            else
+                div -=
+                    (
+                        (σ[x][i, j] - σ[x-ej|>g][i, j]) / dx(g) +
+                        (σ[x+ej|>g][i, j] - σ[x][i, j]) / dx(g) +
+                        (σ[x+ei|>g][i, j] - σ[x+ei-ej|>g][i, j]) / dx(g) +
+                        (σ[x+ei+ej|>g][i, j] - σ[x+ei|>g][i, j]) / dx(g)
+                    ) / 4
+            end
         end
         f[x, i] = div
     end

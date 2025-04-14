@@ -107,3 +107,109 @@ function applyfilter!(v, u, grid, filter, compression, Δ, ::Stag, ::Stag)
     KernelAbstractions.synchronize(backend)
     kernel
 end
+
+function volumefilter_vector!(uH, uh, gH, gh, comp)
+    (; n, backend, workgroupsize) = gH
+    d = dim(gH)
+    @kernel function Φ!(uH, uh, i, volume)
+        x = @index(Global, Cartesian)
+        y = comp * (x - oneunit(x))
+        s = zero(eltype(uH))
+        for r in volume
+            s += uh[y+r|>gh, i]
+        end
+        uH[x, i] = s / comp^d
+    end
+    for i = 1:d
+        ndrange = ntuple(Returns(n), d)
+        a = div(comp, 2)
+        volume = CartesianIndices(ntuple(j -> i == j ? (a+1:comp+a) : (1:comp), d))
+        Φ!(backend, workgroupsize)(uH, uh, i, volume; ndrange)
+    end
+    uH
+end
+
+"Volume-average staggered tensor field."
+function volumefilter_tensor!(rH, rh, gH, gh, comp)
+    (; n, backend, workgroupsize) = gH
+    d = dim(gH)
+    @kernel function Φ!(rH, rh, i, j, volume)
+        x = @index(Global, Cartesian)
+        y = comp * (x - oneunit(x))
+        s = zero(eltype(rH))
+        for r in volume
+            s += rh[y+r|>gh, i, j]
+        end
+        rH[x, i, j] = s / comp^d
+    end
+    for j = 1:d, i = 1:d
+        ndrange = ntuple(Returns(n), d)
+        a = div(comp, 2)
+        volume = if i == j
+            # Filter to coarse volume center
+            CartesianIndices(ntuple(Returns(1:comp), d))
+        else
+            # Filter to coarse corner in ij-section of volume
+            CartesianIndices(ntuple(k -> k == i || k == j ? (a+1:comp+a) : (1:comp), d))
+        end
+        Φ!(backend, workgroupsize)(rH, rh, i, j, volume; ndrange)
+    end
+    rH
+end
+
+function surfacefilter_vector!(uH, uh, gH, gh, comp)
+    (; n, backend, workgroupsize) = gH
+    d = dim(gH)
+    @kernel function Φ!(uH, uh, i, face)
+        x = @index(Global, Cartesian)
+        y = comp * (x - oneunit(x))
+        s = zero(eltype(uH))
+        for r in face
+            s += uh[y+r, i]
+        end
+        uH[x, i] = s / comp^(d - 1)
+    end
+    for i = 1:d
+        ndrange = ntuple(Returns(n), d)
+        face = CartesianIndices(ntuple(j -> j == i ? (comp:comp) : (1:comp), d))
+        Φ!(backend, workgroupsize)(uH, uh, i, face; ndrange)
+    end
+    uH
+end
+
+"Surface-average staggered tensor field."
+function surfacefilter_tensor!(rH, rh, gH, gh, comp, filter_i)
+    (; n, backend, workgroupsize) = gH
+    d = dim(gH)
+    @kernel function Φ!(rH, rh, i, j, face)
+        x = @index(Global, Cartesian)
+        y = comp * (x - oneunit(x))
+        s = zero(eltype(rH))
+        for r in face
+            s += rh[y+r|>gh, i, j]
+        end
+        rH[x, i, j] = s / comp^(d - 1)
+    end
+    for j = 1:d, i = 1:d
+        ndrange = ntuple(Returns(n), d)
+        k = filter_i ? i : j
+        a = div(comp, 2)
+        face = if i == j
+            # Filter to coarse volume center
+            CartesianIndices(ntuple(l -> l == k ? (a+1:a+1) : (1:comp), d))
+        else
+            # Filter to coarse corner in ij-section of volume
+            ntuple(d) do l
+                if l == k
+                    comp:comp
+                elseif l == i || l == j
+                    a+1:comp+a
+                else
+                    1:comp
+                end
+            end |> CartesianIndices
+        end
+        Φ!(backend, workgroupsize)(rH, rh, i, j, face; ndrange)
+    end
+    rH
+end
