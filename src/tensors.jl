@@ -1,11 +1,11 @@
 "Copy symmtric tensor to normal tensor"
-desymmetrize!(::Grid{o,2}, r, rsym) where {o} =  @. begin
+desymmetrize!(::Grid{o,2}, r, rsym) where {o} = @. begin
     r[:, :, 1, 1] = rsym[:, :, 1]
     r[:, :, 2, 2] = rsym[:, :, 2]
     r[:, :, 1, 2] = rsym[:, :, 3]
     r[:, :, 2, 1] = rsym[:, :, 3]
 end
-desymmetrize!(::Grid{o,3}, r, rsym) where {o} =  @. begin
+desymmetrize!(::Grid{o,3}, r, rsym) where {o} = @. begin
     r[:, :, :, 1, 1] = rsym[:, :, :, 1]
     r[:, :, :, 2, 2] = rsym[:, :, :, 2]
     r[:, :, :, 3, 3] = rsym[:, :, :, 3]

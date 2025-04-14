@@ -48,7 +48,7 @@ function create_spectrum(; grid, kp, rng = Random.default_rng())
     # Wavenumber vectors
     kk = ntuple(
         i -> reshape(
-            0:K[i]-1,
+            0:(K[i]-1),
             ntuple(Returns(1), i - 1)...,
             :,
             ntuple(Returns(1), d - i)...,
@@ -86,7 +86,7 @@ function create_spectrum(; grid, kp, rng = Random.default_rng())
     KK = 2 .* K
     kkkk = ntuple(
         i -> reshape(
-            0:KK[i]-1,
+            0:(KK[i]-1),
             ntuple(Returns(1), i - 1)...,
             :,
             ntuple(Returns(1), d - i)...,

@@ -20,8 +20,10 @@ include("utils.jl")
 
 export Stag, Coll, Grid, order, dim, dx, get_axis, apply!
 export scalarfield, vectorfield, collocated_tensorfield, staggered_tensorfield, randomfield
-export poissonsolver, project!, divergence!, convection!, diffusion!, convectiondiffusion!, stresstensor!
-export desymmetrize!, pol_tensor_stag!, tensorproduct_stag!, tensorproduct_coll!, tensordivergence!
+export poissonsolver,
+    project!, divergence!, convection!, diffusion!, convectiondiffusion!, stresstensor!
+export desymmetrize!,
+    pol_tensor_stag!, tensorproduct_stag!, tensorproduct_coll!, tensordivergence!
 export tophat, gaussian, applyfilter!
 export propose_timestep, timestep!
 export spectral_stuff, spectrum

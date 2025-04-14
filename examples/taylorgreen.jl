@@ -277,7 +277,7 @@ volume(
     # lowclip = :transparent,
 )
 
-Q[] = copyto!(Q[], view(q, :, 220, :))
+Q[] = copyto!(Q[], view(q,:,220,:))
 
 s = Turbulox.get_scale_numbers(u, grid, visc)
 

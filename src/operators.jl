@@ -114,7 +114,6 @@ divergence!
     div[x] = divx
 end
 
-
 "Get convection-diffusion stress tensor component `i,j`."
 @inline function stress(g::Grid, u, x, i, j, visc)
     # Non-linear stress
@@ -354,7 +353,7 @@ end
     o = order(g)
     stencil = laplace_stencil(g) .|> eltype(u)
     diff = zero(eltype(u))
-    @unroll for k = 1:2o-1
+    @unroll for k = 1:(2o-1)
         diff += stencil[k] * u[x+(k-o)*e(g, j)|>g, i]
     end
     diff
@@ -455,7 +454,7 @@ laplace_stencil(g::Grid{10}) =
 "Merge stencil periodically if the stencil is longer than the grid size `n`."
 mergestencil(s, n) =
     if length(s) > n
-        a, b = s[1:n], s[n+1:end]
+        a, b = s[1:n], s[(n+1):end]
         b = mergestencil(b, n)
         a[1:length(b)] .+= b
         a
@@ -585,16 +584,16 @@ function get_scale_numbers(u, grid, visc)
     L = let
         K = div(n, 2)
         uhat = fft(u, 1:d)
-        uhat = uhat[ntuple(i -> 1:K, d)..., :]
+        uhat = uhat[ntuple(i->1:K, d)..., :]
         e = abs2.(uhat) ./ (2 * (n^d)^2)
         if d == 2
-            kx = reshape(0:K-1, :)
-            ky = reshape(0:K-1, 1, :)
+            kx = reshape(0:(K-1), :)
+            ky = reshape(0:(K-1), 1, :)
             @. e = e / sqrt(kx^2 + ky^2)
         else
-            kx = reshape(0:K-1, :)
-            ky = reshape(0:K-1, 1, :)
-            kz = reshape(0:K-1, 1, 1, :)
+            kx = reshape(0:(K-1), :)
+            ky = reshape(0:(K-1), 1, :)
+            kz = reshape(0:(K-1), 1, 1, :)
             @. e = e / sqrt(kx^2 + ky^2 + kz^2)
         end
         e = sum(e; dims = d + 1)

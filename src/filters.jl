@@ -12,7 +12,7 @@ function gaussian(grid, compression, Δ)
     r = 2r # Corresponds to x = Δ, sufficient to cover tail
     @assert isodd(compression)
     w = let
-        x = (-r:r) .* (L / n)
+        x = ((-r):r) .* (L / n)
         y = reshape(x, 1, :)
         z = reshape(x, 1, 1, :)
         if d == 2
@@ -24,7 +24,7 @@ function gaussian(grid, compression, Δ)
     w = w ./ sum(w) # Normalize
     weights = adapt(backend, w)
     R = ntuple(Returns(r), d) |> splat(CartesianIndex)
-    indices = -R:R # In 3D: (2r+1)^3 points in kernel
+    indices = (-R):R # In 3D: (2r+1)^3 points in kernel
     (; weights, indices, compression)
 end
 
@@ -39,7 +39,7 @@ function tophat(grid, compression, Δ)
     w = fill(T(1) / (2r + 1)^d, ntuple(Returns(2r + 1), d))
     weights = adapt(backend, w)
     R = ntuple(Returns(r), d) |> splat(CartesianIndex)
-    indices = -R:R
+    indices = (-R):R
     (; weights, indices, compression)
 end
 
@@ -94,7 +94,7 @@ function applyfilter!(v, u, grid, filter, compression, Δ, ::Stag, ::Stag)
     for j = 1:d, i = 1:d
         offset =
             CartesianIndex(ntuple(k -> (i != j) && (k == i || k == j) ? 0 : -r, dim(grid)))
-        v_ij, u_ij = view(v, :, :, :, i, j), view(u, :, :, :, i, j)
+        v_ij, u_ij = view(v,:,:,:,i,j), view(u,:,:,:,i,j)
         convolve!(backend, workgroupsize)(
             grid,
             v_ij,
@@ -123,7 +123,7 @@ function volumefilter_vector!(uH, uh, gH, gh, comp)
     for i = 1:d
         ndrange = ntuple(Returns(n), d)
         a = div(comp, 2)
-        volume = CartesianIndices(ntuple(j -> i == j ? (a+1:comp+a) : (1:comp), d))
+        volume = CartesianIndices(ntuple(j -> i == j ? ((a+1):(comp+a)) : (1:comp), d))
         Φ!(backend, workgroupsize)(uH, uh, i, volume; ndrange)
     end
     uH
@@ -150,7 +150,7 @@ function volumefilter_tensor!(rH, rh, gH, gh, comp)
             CartesianIndices(ntuple(Returns(1:comp), d))
         else
             # Filter to coarse corner in ij-section of volume
-            CartesianIndices(ntuple(k -> k == i || k == j ? (a+1:comp+a) : (1:comp), d))
+            CartesianIndices(ntuple(k -> k == i || k == j ? ((a+1):(comp+a)) : (1:comp), d))
         end
         Φ!(backend, workgroupsize)(rH, rh, i, j, volume; ndrange)
     end
@@ -196,14 +196,14 @@ function surfacefilter_tensor!(rH, rh, gH, gh, comp, filter_i)
         a = div(comp, 2)
         face = if i == j
             # Filter to coarse volume center
-            CartesianIndices(ntuple(l -> l == k ? (a+1:a+1) : (1:comp), d))
+            CartesianIndices(ntuple(l -> l == k ? ((a+1):(a+1)) : (1:comp), d))
         else
             # Filter to coarse corner in ij-section of volume
             ntuple(d) do l
                 if l == k
                     comp:comp
                 elseif l == i || l == j
-                    a+1:comp+a
+                    (a+1):(comp+a)
                 else
                     1:comp
                 end

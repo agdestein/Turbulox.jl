@@ -8,13 +8,13 @@ function spectral_stuff(grid; npoint = 100)
 
     k = zeros(T, K)
     if d == 2
-        kx = reshape(0:K[1]-1, :)
-        ky = reshape(0:K[2]-1, 1, :)
+        kx = reshape(0:(K[1]-1), :)
+        ky = reshape(0:(K[2]-1), 1, :)
         @. k = sqrt(kx^2 + ky^2)
     elseif d == 3
-        kx = reshape(0:K[1]-1, :)
-        ky = reshape(0:K[2]-1, 1, :)
-        kz = reshape(0:K[3]-1, 1, 1, :)
+        kx = reshape(0:(K[1]-1), :)
+        ky = reshape(0:(K[2]-1), 1, :)
+        kz = reshape(0:(K[3]-1), 1, 1, :)
         @. k = sqrt(kx^2 + ky^2 + kz^2)
     end
     k = reshape(k, :)

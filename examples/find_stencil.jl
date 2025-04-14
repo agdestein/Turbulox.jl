@@ -2,7 +2,7 @@
 # such that the leading order error terms cancel out
 # Note: order = 2n
 function find_stencil(n)
-    A = broadcast((i, j) -> (2j - 1)^2i // 1, 1:n-1, (1:n)') # Note: Matrix of rationals
+    A = broadcast((i, j) -> (2j - 1)^2i // 1, 1:(n-1), (1:n)') # Note: Matrix of rationals
     A = vcat(A, fill(1, 1, n)) # Last row: ones (sum of coefficients)
     y = map(i -> i == n, 1:n) # Right-hand side: zeros (terms cancel out), except for last element (sum of coefficients = 1)
     x = A \ y # Solve for coefficients x
