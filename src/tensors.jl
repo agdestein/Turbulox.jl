@@ -173,6 +173,27 @@ end
     diss[x] = -dot(σ[x], S)
 end
 
+@kernel function tensordissipation_staggered!(g::Grid, diss, σ, u)
+    x = @index(Global, Cartesian)
+    d = zero(eltype(diss))
+    @unroll for i = 1:dim(g)
+        @unroll for j = 1:dim(g)
+            ei, ej = e(g, i), e(g, j)
+            if i == j
+                d -= σ[x, i, j] * δ(g, u, x, i, j)
+            else
+                d -= (
+                    σ[x, i, j] * strain(g, u, x, i, j) +
+                    σ[x - ei, i, j] * strain(g, u, x - ei, i, j) +
+                    σ[x - ej, i, j] * strain(g, u, x - ej, i, j) +
+                    σ[x - ei - ej, i, j] * strain(g, u, x - ei - ej, i, j)
+                ) / 4
+            end
+        end
+    end
+    diss[x] = d
+end
+
 @inline function invariants(::Grid{o,2}, ∇u) where {o}
     S = (∇u + ∇u') / 2
     R = (∇u - ∇u') / 2
@@ -284,13 +305,13 @@ end
     τ[x] = τx
 end
 
+@inline strain(g::Grid, u, x, i, j) = (δ(g, u, x, i, j) + δ(g, u, x, j, i)) / 2
+
 @kernel function strain!(grid, S, u)
     x = @index(Global, Cartesian)
     @unroll for i = 1:dim(grid)
         @unroll for j = 1:dim(grid)
-            Gij = δ(grid, u, x, i, j)
-            Gji = δ(grid, u, x, j, i)
-            S[x, i, j] = (Gij + Gji) / 2
+            S[x, i, j] = strain(g, u, x, i, j)
         end
     end
 end
