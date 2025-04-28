@@ -1,60 +1,26 @@
-"Allocate empty scalar field."
-scalarfield(g::Grid) =
-    KernelAbstractions.zeros(g.backend, typeof(g.L), ntuple(Returns(g.n), dim(g)))
-
-"Allocate empty vector field."
-vectorfield(g::Grid) = KernelAbstractions.zeros(
-    g.backend,
-    typeof(g.L),
-    ntuple(Returns(g.n), dim(g))...,
-    dim(g),
-)
-
 "Allocate empty tensor field (collocated)."
 function collocated_tensorfield(g::Grid)
     (; L, backend) = g
-    d = dim(g)
-    d2 = d * d
     T = typeof(L)
-    KernelAbstractions.zeros(backend, SMatrix{d,d,T,d2}, ntuple(Returns(g.n), d))
-end
-
-"Allocate empty tensor field (staggered)."
-function tensorfield(g::Grid)
-    (; L, n, backend) = g
-    d = dim(g)
-    T = typeof(L)
-    KernelAbstractions.zeros(backend, T, ntuple(Returns(n), d)..., d, d)
+    data = KernelAbstractions.zeros(backend, SMatrix{3,3,T,9}, g.n, g.n, g.n)
+    ScalarField(g, data)
 end
 
 "Allocate empty tensor field (symmetric, staggered)."
-function symmetric_tensorfield(g::Grid)
-    (; L, n, backend) = g
-    d = dim(g)
-    T = typeof(L)
-    ndof = d == 2 ? 3 : 6
-    KernelAbstractions.zeros(backend, T, ntuple(Returns(n), d)..., ndof)
-end
+symmetric_tensorfield(g::Grid) =
+    KernelAbstractions.zeros(g.backend, typeof(g.L), g.n, g.n, g.n, 6)
 
 function create_spectrum(; grid, kp, rng = Random.default_rng())
     (; L, backend) = grid
     T = typeof(L)
-    d = dim(grid)
+    d = 3
     τ = T(2π)
 
     # Maximum wavenumber (remove ghost volumes)
-    K = ntuple(Returns(div(grid.n, 2)), d)
+    K = ntuple(Returns(div(grid.n, 2)), 3)
 
     # Wavenumber vectors
-    kk = ntuple(
-        i -> reshape(
-            0:(K[i]-1),
-            ntuple(Returns(1), i - 1)...,
-            :,
-            ntuple(Returns(1), d - i)...,
-        ),
-        d,
-    )
+    kk = reshape(0:(K[1]-1), :), reshape(0:(K[2]-1), 1, :), reshape(0:(K[3]-1), 1, 1, :)
 
     # Wavevector magnitude
     k = KernelAbstractions.zeros(backend, T, K)
@@ -68,13 +34,13 @@ function create_spectrum(; grid, kp, rng = Random.default_rng())
 
     # Velocity magnitude
     a = @. complex(1) * sqrt(A * k^4 * exp(-τ * (k / kp)^2))
-    a .*= grid.n^d
+    a .*= grid.n^3
 
     # Apply random phase shift
-    ξ = ntuple(i -> rand!(rng, KernelAbstractions.allocate(backend, T, K)), d)
-    for i = 1:d
+    ξ = ntuple(i -> rand!(rng, KernelAbstractions.allocate(backend, T, K)), 3)
+    for i = 1:3
         a = cat(a, reverse(a; dims = i); dims = i)
-        ξ = ntuple(d) do j
+        ξ = ntuple(3) do j
             s = i == j ? -1 : 1
             ξβ = ξ[j]
             cat(ξβ, reverse(s .* ξβ; dims = i); dims = i)
@@ -84,34 +50,22 @@ function create_spectrum(; grid, kp, rng = Random.default_rng())
     a = @. exp(im * τ * ξ) * a
 
     KK = 2 .* K
-    kkkk = ntuple(
-        i -> reshape(
-            0:(KK[i]-1),
-            ntuple(Returns(1), i - 1)...,
-            :,
-            ntuple(Returns(1), d - i)...,
-        ),
-        d,
-    )
+    kkkk =
+        reshape(0:(KK[1]-1), :), reshape(0:(KK[2]-1), 1, :), reshape(0:(KK[3]-1), 1, 1, :)
     knorm = KernelAbstractions.zeros(backend, T, KK)
-    for i = 1:d
+    for i = 1:3
         @. knorm += kkkk[i]^2
     end
     knorm .= sqrt.(knorm)
 
     # Create random unit vector for each wavenumber
-    if d == 2
-        θ = rand!(rng, similar(knorm))
-        e = (cospi.(2 .* θ), sinpi.(2 .* θ))
-    elseif d == 3
-        θ = rand!(rng, similar(knorm))
-        ϕ = rand!(rng, similar(knorm))
-        e = (sinpi.(θ) .* cospi.(2 .* ϕ), sinpi.(θ) .* sinpi.(2 .* ϕ), cospi.(θ))
-    end
+    θ = rand!(rng, similar(knorm))
+    ϕ = rand!(rng, similar(knorm))
+    e = sinpi.(θ) .* cospi.(2 .* ϕ), sinpi.(θ) .* sinpi.(2 .* ϕ), cospi.(θ)
 
     # Remove non-divergence free part: (I - k k^T / k^2) e
-    ke = sum(i -> e[i] .* kkkk[i], 1:d)
-    for i = 1:d
+    ke = sum(i -> e[i] .* kkkk[i], 1:3)
+    for i = 1:3
         e0 = e[i][1:1] # CUDA doesn't like e[i][1]
         @. e[i] -= kkkk[i] * ke / knorm^2
         # Restore k=0 component, which is divergence free anyways
@@ -119,13 +73,13 @@ function create_spectrum(; grid, kp, rng = Random.default_rng())
     end
 
     # Normalize
-    enorm = sqrt.(sum(i -> e[i] .^ 2, 1:d))
-    for i = 1:d
+    enorm = sqrt.(sum(i -> e[i] .^ 2, 1:3))
+    for i = 1:3
         e[i] ./= enorm
     end
 
     # Split velocity magnitude a into velocity components a*eα
-    uhat = ntuple(d) do i
+    uhat = ntuple(3) do i
         eα = e[i]
         a .* eα
     end
@@ -133,16 +87,15 @@ function create_spectrum(; grid, kp, rng = Random.default_rng())
 end
 
 function randomfield(grid, solver!; A = 1, kp = 10, rng = Random.default_rng())
-    d = dim(grid)
-
     # Create random velocity field
     uhat = create_spectrum(; grid, kp, rng)
-    u = ifft(uhat, 1:d)
+    u = ifft(uhat, 1:3)
     u = @. A * real(u)
+    u = VectorField(grid, u)
 
     # Make velocity field divergence free on staggered grid
     # (it is already divergence free on the "spectral grid")
-    p = scalarfield(grid)
-    project!(u, p, solver!, grid)
+    p = ScalarField(grid)
+    project!(u, p, solver!)
     u
 end

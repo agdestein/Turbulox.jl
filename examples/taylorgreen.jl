@@ -18,24 +18,24 @@ set_theme!(theme_dark())
 T = Float64
 f = T(1)
 
-# backend = KernelAbstractions.CPU()
-backend = CUDABackend()
+backend = KernelAbstractions.CPU()
+# backend = CUDABackend()
 
-visc = 1 / 2_000 |> T
+visc = 1 / 5_000 |> T
 
 # Initial conditions
 Ux(x, y, z) = sinpi(2x) * cospi(2y) * sinpi(2z) / 2
 Uy(x, y, z) = -cospi(2x) * sinpi(2y) * sinpi(2z) / 2
 Uz(x, y, z) = zero(x)
 
-grid = Turbulox.RGrid(; order = 2, dim = 3, n = 128, backend);
+grid = Turbulox.Grid(; ho = Val(1), n = 64, L = 1.0, backend);
 solver! = Turbulox.poissonsolver(grid);
 
-u = Turbulox.vectorfield(grid);
+u = Turbulox.VectorField(grid);
 cache = (;
-    ustart = Turbulox.vectorfield(grid),
-    du = Turbulox.vectorfield(grid),
-    p = Turbulox.scalarfield(grid),
+    ustart = Turbulox.VectorField(grid),
+    du = Turbulox.VectorField(grid),
+    p = Turbulox.ScalarField(grid),
 );
 
 # Initialize
@@ -52,18 +52,18 @@ zp = reshape(xp, 1, 1, :);
 u[:, :, :, 1] .= Ux.(x, yp, zp);
 u[:, :, :, 2] .= Uy.(xp, y, zp);
 u[:, :, :, 3] .= Uz.(xp, yp, z);
-Turbulox.project!(u, cache.p, solver!, grid);
+Turbulox.project!(u, cache.p, solver!);
 
 "Compute ``z``-component of vorticity in the plane ``z=z``."
-@kernel function vort_z(grid, ω, u, z)
+@kernel function vort_z(ω, u, z)
     x, y = @index(Global, NTuple)
     X = CartesianIndex((x, y, z))
-    δux_δy = Turbulox.δ(grid, u, X, 1, 2)
-    δuy_δx = Turbulox.δ(grid, u, X, 2, 1)
+    δux_δy = Turbulox.δ(u, X, 1, 2)
+    δuy_δx = Turbulox.δ(u, X, 2, 1)
     ω[x, y] = -δux_δy + δuy_δx
 end
 
-fig, ω_obs, ω = let
+fig, ω_obs = let
     ω_obs = Observable(Array(u[:, :, 1, 1]))
     colorrange = lift(ω_obs) do ω
         r = maximum(abs, ω)
@@ -87,7 +87,7 @@ fig, ω_obs, ω = let
         figure = (; size = (600, 600)),
     )
     Colorbar(fig[1, 2], hm)
-    fig, ω_obs, ω
+    fig, ω_obs
 end
 fig
 
@@ -149,13 +149,14 @@ closure! =
 du = zero(u);
 closure!(du, u);
 
-function rhs!(du, u, grid)
+function rhs!(du, u)
     fill!(du, 0)
-    Turbulox.apply!(Turbulox.convectiondiffusion!, grid, du, u, visc)
+    Turbulox.apply!(Turbulox.convectiondiffusion!, u.grid, du, u, visc)
     # closure!(du, u)
 end
 
-CUDA.@profile rhs!(du, u, grid)
+rhs!(du, u)
+CUDA.@profile rhs!(du, u)
 @profview (rhs!(du, u, grid); KernelAbstractions.synchronize(backend))
 
 let
@@ -164,18 +165,19 @@ let
     i = 0
     tmax = 20f
     n0 = norm(u)
+    @show tmax
     while t < tmax
         i += 1
-        Δt = T(0.85) * Turbulox.propose_timestep(u, grid)
+        Δt = T(0.85) * Turbulox.propose_timestep(u, visc)
         Δt = min(Δt, tmax - t)
         # Δt = T(0.01)
-        Turbulox.timestep!(rhs!, u, cache, Δt, solver!, grid)
+        Turbulox.timestep!(rhs!, u, cache, Δt, solver!)
         t += Δt
         @show t
         if i % 1 == 0
             nn = norm(u)
             nn > 2 * n0 && break
-            Turbulox.apply!(vort_z, grid, ω, u, grid.n ÷ 4)
+            Turbulox.apply!(vort_z, u.grid, ω, u, grid.n ÷ 4)
             # ω_obs[] = copyto!(ω_obs[], ω)
             ω_obs[] = copyto!(ω_obs[], u[:, :, 1, 1])
             sleep(0.01)
@@ -190,7 +192,7 @@ s = Turbulox.get_scale_numbers(u, grid, visc)
 
 let
     stuff = Turbulox.spectral_stuff(grid)
-    spec = Turbulox.spectrum(usmag, grid; stuff)
+    spec = Turbulox.spectrum(u, grid; stuff)
     fig = Figure()
     ax = Axis(fig[1, 1]; xscale = log10, yscale = log10)
     lines!(ax, Point2f.(spec.κ, spec.s))
@@ -199,17 +201,19 @@ let
     lines!(ax, xslope, yslope; color = Cycled(2))
     vlines!(ax, 1 / s.L / 1)
     vlines!(ax, 1 / s.λ / 1)
-    display(GLMakie.Screen(), fig)
+    fig
+    # display(GLMakie.Screen(), fig)
 end
 
-ubar = Turbulox.vectorfield(grid);
+ubar = Turbulox.VectorField(grid);
 ∇u = Turbulox.collocated_tensorfield(grid);
-q = Turbulox.scalarfield(grid);
-r = Turbulox.scalarfield(grid);
+q = Turbulox.ScalarField(grid);
+r = Turbulox.ScalarField(grid);
 Turbulox.gaussian!(ubar, u, T(1 / 50), grid);
-Turbulox.apply!(Turbulox.velocitygradient_coll!, grid, ∇u, u);
+apply!(Turbulox.velocitygradient_coll!, grid, ∇u, u);
 # Turbulox.apply!(Turbulox.velocitygradient!, grid, ∇u, ubar);
 Turbulox.apply!(Turbulox.compute_qr!, grid, q, r, ∇u);
+apply!(Turbulox.compute_q!, grid, q, ∇u);
 
 q
 r
@@ -239,7 +243,7 @@ let
     heatmap!(
         ax,
         Q;
-        colorrange = (0.10, 5),
+        # colorrange = (-0.10, 5),
         # lowclip = :transparent,
     )
     fig

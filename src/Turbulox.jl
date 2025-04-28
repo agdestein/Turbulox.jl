@@ -18,8 +18,8 @@ include("time.jl")
 include("filters.jl")
 include("utils.jl")
 
-export Stag, Coll, Grid, order, dim, dx, get_axis, apply!
-export scalarfield, vectorfield, collocated_tensorfield, tensorfield, randomfield
+export Stag, Coll, Grid, order, dx, get_axis, apply!
+export ScalarField, VectorField, collocated_tensorfield, TensorField, randomfield
 export poissonsolver,
     project!, divergence!, convection!, diffusion!, convectiondiffusion!, stresstensor!
 export desymmetrize!,
