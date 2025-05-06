@@ -32,7 +32,7 @@ end
 
 @testitem "Consistency of Laplace stencils" begin
     using Turbulox: laplace_stencil
-    for ho in 1:5
+    for ho = 1:5
         g = Grid(; ho = Val(ho), L = 1.0, n = 16)
         stencil = laplace_stencil(g)
         # Use equality, since weights are rational
@@ -42,7 +42,7 @@ end
 end
 
 @testitem "Pressure projection" begin
-    for ho in 1:5
+    for ho = 1:5
         grid = Grid(; ho = Val(ho), L = 1.0, n = 16)
         solver! = poissonsolver(grid)
         u = VectorField(grid, randn(grid.n, grid.n, grid.n, 3))
@@ -56,8 +56,8 @@ end
 
 @testitem "(Skew-)symmetry of operators" begin
     using LinearAlgebra
-    for ho in 1:5
-        grid = Grid(; ho = Val(ho),  L = 1.0, n = 16)
+    for ho = 1:5
+        grid = Grid(; ho = Val(ho), L = 1.0, n = 16)
         solver! = poissonsolver(grid)
         # Check that the convection operator is skew-symmetric
         # for a divergence-free field

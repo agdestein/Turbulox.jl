@@ -84,14 +84,8 @@ function applyfilter!(v, u, grid, filter, compression, Δ, ::Stag, ::Stag)
     r = div(compression, 2)
     for j = 1:3, i = 1:3
         offset = CartesianIndex(ntuple(k -> (i != j) && (k == i || k == j) ? 0 : -r, 3))
-        v_ij, u_ij = view(v, :, :, :, i, j), view(u, :, :, :, i, j)
-        convolve!(backend, workgroupsize)(
-            v_ij,
-            u_ij,
-            kernel,
-            offset;
-            ndrange = size(v_ij),
-        )
+        v_ij, u_ij = view(v,:,:,:,i,j), view(u,:,:,:,i,j)
+        convolve!(backend, workgroupsize)(v_ij, u_ij, kernel, offset; ndrange = size(v_ij))
     end
     KernelAbstractions.synchronize(backend)
     kernel

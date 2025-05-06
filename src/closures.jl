@@ -23,9 +23,9 @@ Subtract result from existing force field `f`.
 """
 @kernel function eddyviscosity_closure!(f, visc, ∇u)
     x = @index(Global, Cartesian)
-    @unroll for i in 1:3
+    @unroll for i = 1:3
         div = f[x, i] # Add closure to existing force
-        @unroll for j in 1:3
+        @unroll for j = 1:3
             ei, ej = e(i), e(j)
             if i == j
                 nu_a = visc[x]

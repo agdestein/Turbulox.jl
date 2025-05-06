@@ -6,23 +6,24 @@
 @inline w(::Grid{5}) =
     19845 // 16384, -2205 // 8192, 567 // 8192, -405 // 32768, 35 // 32768
 
-# Vector field gradient δu[i] / δx[j].
-@inline δ(n::Int, u::VectorField, x, i, j) =
-    (u[x+(n-1+(i!=j))*e(j), i] - u[x-(n-1+(i==j))*e(j), i]) / (2n - 1) / dx(u.grid)
-@inline δ(u::VectorField, x, i, j) =
-    sum(ntuple(n -> w(u.grid)[n] * δ(n, u, x, i, j), u.grid.ho))
+"Compute finite difference δ_i u(x) of the order given by grid."
+@inline δ(u::ScalarField, x, i) = sum(ntuple(n -> w(u.grid)[n] * δ(n, u, x, i), u.grid.ho))
 
-# Scalar field gradient δp / δx[j].
-@inline δ(n::Int, p::ScalarField, x, j) =
-    (p[x+n*e(j)] - p[x-(n-1)*e(j)]) / (2n - 1) / dx(p.grid)
-@inline δ(p::ScalarField, x, j) =
-    sum(ntuple(n -> w(p.grid)[n] * δ(n, p, x, j), p.grid.ho))
+"Compute second order finite difference ``\\delta^{(2n+1) h}_i u(x)`` of width ``(2 n + 1) h``."
+@inline δ(n::Int, u::ScalarField, x, i) = δ(n, u.position[i], u, x, i)
+@inline δ(n::Int, ::Stag, u::ScalarField, x, i) =
+    (u[x+(n-1)*e(i)] - u[x-n*e(i)]) / (2n - 1) / dx(u.grid)
+@inline δ(n::Int, ::Coll, u::ScalarField, x, i) =
+    (u[x+n*e(i)] - u[x-(n-1)*e(i)]) / (2n - 1) / dx(u.grid)
 
 # Interpolate u[i] in direction j. Land in canonical position at x.
-@inline pol(n::Int, u::VectorField, x, i, j) =
-    (u[x-(n-1+(i==j))*e(j), i] + u[x+(n-1+(i!=j))*e(j), i]) / 2
-@inline pol(u::VectorField, x, i, j) =
-    sum(ntuple(n -> w(u.grid)[n] * pol(n, u, x, i, j), u.grid.ho))
+@inline interpolate(n::Int, u::ScalarField, x, i) = interpolate(n, u.position[i], u, x, i)
+@inline interpolate(n::Int, ::Stag, u::ScalarField, x, i) =
+    (u[x-n*e(i)] + u[x+(n-1)*e(i)]) / 2
+@inline interpolate(n::Int, ::Coll, u::ScalarField, x, i) =
+    (u[x-(n-1)*e(i)] + u[x+n*e(i)]) / 2
+@inline interpolate(u::ScalarField, x, i) =
+    sum(ntuple(n -> w(u.grid)[n] * interpolate(n, u, x, i), u.grid.ho))
 
 """
 Compute divergence of vector field `u`.
@@ -32,23 +33,21 @@ divergence!
 
 @kernel function divergence!(div, u)
     x = @index(Global, Cartesian)
-    divx = zero(eltype(div))
-    @unroll for j = 1:3
-        divx += δ(u, x, j, j)
+    div[x] = sum(directions()) do j
+        δ(u[j], x, j)
     end
-    div[x] = divx
 end
 
 "Get convection-diffusion stress tensor component `i,j`."
 @inline function stress(u, x, i, j, visc)
     # Non-linear stress
-    ui_xj = pol(u, x, i, j)
-    uj_xi = pol(u, x, j, i)
+    ui_xj = interpolate(u[i], x, j)
+    uj_xi = interpolate(u[j], x, i)
     ui_uj = ui_xj * uj_xi
 
     # Strain-rate
-    δj_ui = δ(u, x, i, j)
-    δi_uj = δ(u, x, j, i)
+    δj_ui = δ(u[i], x, j)
+    δi_uj = δ(u[j], x, i)
     sij = (δj_ui + δi_uj) / 2
 
     # Resulting stress
@@ -76,16 +75,16 @@ end
 end
 
 "Approximate the convective force ``\\partial_j (u_i u_j)``."
-@inline function convterm(u, x, i, j)
+@inline function conv(u, x, i, j)
     ei, ej = e(i), e(j)
 
     # ui interpolated in direction xj with grid size nh (n = 1, 3, 5, 7, 9)
-    ui_nxj_a = ntuple(n -> pol(n, u, x - (n - 1 + (i != j)) * ej, i, j), u.grid.ho)
-    ui_nxj_b = ntuple(n -> pol(n, u, x + (n - 1 + (i == j)) * ej, i, j), u.grid.ho)
+    ui_nxj_a = ntuple(n -> interpolate(n, u[i], x - (n - 1 + (i != j)) * ej, j), u.grid.ho)
+    ui_nxj_b = ntuple(n -> interpolate(n, u[i], x + (n - 1 + (i == j)) * ej, j), u.grid.ho)
 
     # uj interpolated in direction xi with order
-    uj_xi_na = ntuple(n -> pol(u, x - (n - 1 + (i != j)) * ej, j, i), u.grid.ho)
-    uj_xi_nb = ntuple(n -> pol(u, x + (n - 1 + (i == j)) * ej, j, i), u.grid.ho)
+    uj_xi_na = ntuple(n -> interpolate(u[j], x - (n - 1 + (i != j)) * ej, i), u.grid.ho)
+    uj_xi_nb = ntuple(n -> interpolate(u[j], x + (n - 1 + (i == j)) * ej, i), u.grid.ho)
 
     # Tensor product -- see  Morinishi 1998 eq. (112)
     ui_uj_na = ntuple(n -> ui_nxj_a[n] * uj_xi_na[n], u.grid.ho)
@@ -93,61 +92,33 @@ end
 
     # Divergence of tensor: Lands at canonical position of ui in volume x
     # coefficient computed in script
-    sum(ntuple(n -> w(u.grid)[n] * (ui_uj_nb[n] - ui_uj_na[n]) / (2n - 1), u.grid.ho)) / dx(u.grid)
+    sum(ntuple(n -> w(u.grid)[n] * (ui_uj_nb[n] - ui_uj_na[n]) / (2n - 1), u.grid.ho)) /
+    dx(u.grid)
 end
 
-@inline function diffusionterm(u, x, i, j)
+"Laplacian."
+@inline function lap(u, x, i, j)
     g = u.grid
     o = order(g)
     stencil = laplace_stencil(g) .|> eltype(u)
     diff = zero(eltype(u))
     @unroll for k = 1:(2o-1)
-        diff += stencil[k] * u[x+(k-o)*e(j), i]
+        diff += stencil[k] * u[i][x+(k-o)*e(j)]
     end
     diff
 end
 
+@inline convdiff(u, x, i, j, visc) = -conv(u, x, i, j) + visc * lap(u, x, i, j)
+
 """
-Compute convection-diffusion force from velocity `u`.
-Add the force field to `f`.
+Compute ``v_i(I) = \\sum_j f(u, I, i, j)``.
 """
-convectiondiffusion!
-
-@kernel function convectiondiffusion!(f, u, visc)
-    T = eltype(u)
-    x = @index(Global, Cartesian)
-    @unroll for i in 1:3
-        fxi = f[x, i]
-        @unroll for j in 1:3
-            fxi -= convterm(u, x, i, j)
-            fxi += visc * diffusionterm(u, x, i, j)
-        end
-        f[x, i] = fxi
-    end
-end
-
-@kernel function convection!(f, u)
-    T = eltype(u)
-    x = @index(Global, Cartesian)
-    @unroll for i = 1:3
-        fxi = f[x, i]
-        @unroll for j = 1:3
-            fxi -= convterm(u, x, i, j)
-        end
-        f[x, i] = fxi
-    end
-end
-
-@kernel function diffusion!(f, u, visc)
-    T = eltype(u)
-    x = @index(Global, Cartesian)
-    @unroll for i = 1:3
-        fxi = f[x, i]
-        @unroll for j = 1:3
-            fxi += visc * diffusionterm(u, x, i, j)
-        end
-        f[x, i] = fxi
-    end
+@kernel function tensorapply!(f, v, u, a...)
+    I = @index(Global, Cartesian)
+    x, y, z = X(), Y(), Z()
+    v[x][I] = f(u, I, x, x, a...) + f(u, I, x, y, a...) + f(u, I, x, z, a...)
+    v[y][I] = f(u, I, y, x, a...) + f(u, I, y, y, a...) + f(u, I, y, z, a...)
+    v[z][I] = f(u, I, z, x, a...) + f(u, I, z, y, a...) + f(u, I, z, z, a...)
 end
 
 laplace_stencil(g::Grid{1}) = (1, -2, 1) ./ dx(g)^2
@@ -272,9 +243,9 @@ pressuregradient!
 
 @kernel function pressuregradient!(u, p)
     x = @index(Global, Cartesian)
-    @unroll for i = 1:3
-        u[x, i] -= δ(p, x, i)
-    end
+    u[X()][x] -= δ(p, x, X())
+    u[Y()][x] -= δ(p, x, Y())
+    u[Z()][x] -= δ(p, x, Z())
 end
 
 "Project velocity field onto divergence-free space."
@@ -302,19 +273,20 @@ Get the following dimensional scale numbers [popeTurbulentFlows2000](@cite):
 - Integral length scale ``L = \\frac{3 \\pi}{2 u_\\text{avg}^2} \\int_0^\\infty \\frac{E(k)}{k} \\, \\mathrm{d} k``
 - Large-eddy turnover time ``\\tau = \\frac{L}{u_\\text{avg}}``
 """
-function get_scale_numbers(u, grid, visc)
+function get_scale_numbers(u, visc)
+    (; grid) = u
     (; n) = grid
     T = eltype(u)
-    uavg = sqrt(sum(abs2, u) / length(u))
-    ϵ_field = ScalarField(grid)
-    apply!(dissipation!, grid, ϵ_field, u, visc)
-    ϵ = sum(ϵ_field) / length(ϵ_field)
-    eta = (visc^3 / ϵ)^T(1 / 4)
-    λ = sqrt(5 * visc / ϵ) * uavg
+    uavg = sqrt(sum(abs2, u.data) / length(u))
+    diss = ScalarField(grid)
+    apply!(dissipation!, grid, diss, u, visc)
+    D = sum(diss.data) / length(diss)
+    eta = (visc^3 / D)^T(1 / 4)
+    λ = sqrt(5 * visc / D) * uavg
     L = let
         K = div(n, 2)
-        uhat = fft(u, 1:3)
-        uhat = uhat[ntuple(i -> 1:K, 3)..., :]
+        uhat = fft(u.data, 1:3)
+        uhat = uhat[ntuple(i->1:K, 3)..., :]
         e = abs2.(uhat) ./ (2 * (n^3)^2)
         kx = reshape(0:(K-1), :)
         ky = reshape(0:(K-1), 1, :)
@@ -329,9 +301,9 @@ function get_scale_numbers(u, grid, visc)
     end
     t_int = L / uavg
     t_tay = λ / uavg
-    t_kol = visc / ϵ |> sqrt
+    t_kol = visc / D |> sqrt
     Re_int = L * uavg / visc
     Re_tay = λ * uavg / sqrt(T(3)) / visc
     Re_kol = eta * uavg / sqrt(T(3)) / visc
-    (; uavg, ϵ, L, λ, eta, t_int, t_tay, t_kol, Re_int, Re_tay, Re_kol)
+    (; uavg, D, L, λ, eta, t_int, t_tay, t_kol, Re_int, Re_tay, Re_kol)
 end

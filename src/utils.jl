@@ -46,7 +46,8 @@ function spectral_stuff(grid; npoint = 100)
     (; inds, κ, K, uhat, ehat, plan)
 end
 
-function spectrum(u, grid; npoint = 100, stuff = spectral_stuff(grid; npoint))
+function spectrum(u; npoint = 100, stuff = spectral_stuff(grid; npoint))
+    (; grid) = u
     (; n) = grid
     T = eltype(u)
     N = n, n, n

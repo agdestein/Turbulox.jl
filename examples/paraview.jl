@@ -26,11 +26,7 @@ grid = Grid(; ho = Val(2), n = 128, L = 1.0);
 solver! = poissonsolver(grid);
 
 ustart = randomfield(grid, solver!; kp = 5);
-cache = (;
-    ustart = VectorField(grid),
-    du = VectorField(grid),
-    p = ScalarField(grid),
-);
+cache = (; ustart = VectorField(grid), du = VectorField(grid), p = ScalarField(grid));
 
 function rhs!(du, u)
     fill!(du, 0)

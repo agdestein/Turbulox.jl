@@ -38,8 +38,8 @@ end
 
 @kernel function pol_tensor_stag!(σ_stag, σ_coll)
     x = @index(Global, Cartesian)
-    @unroll for j = 1:3
-        @unroll for i = 1:3
+    @unroll for j in directions()
+        @unroll for i in directions()
             σ_stag[x, i, j] = pol_tensor_stag(σ_coll, x, i, j)
         end
     end
@@ -48,27 +48,27 @@ end
 @inline function δ_collocated(u, x, i, j)
     ei, ej = e(i), e(j)
     if i == j
-        δ(u, x, i, j)
+        δ(u[i], x, j)
     else
         (
-            δ(u, x, i, j) +
-            δ(u, x - ej, i, j) +
-            δ(u, x - ei, i, j) +
-            δ(u, x - ei - ej, i, j)
+            δ(u[i], x, j) +
+            δ(u[i], x - ej, j) +
+            δ(u[i], x - ei, j) +
+            δ(u[i], x - ei - ej, j)
         ) / 4
     end
 end
 
-@inline ∇_collocated(u, x::CartesianIndex{3}) = SMatrix{3,3,eltype(u),9}(
-    δ_collocated(u, x, 1, 1),
-    δ_collocated(u, x, 2, 1),
-    δ_collocated(u, x, 3, 1),
-    δ_collocated(u, x, 1, 2),
-    δ_collocated(u, x, 2, 2),
-    δ_collocated(u, x, 3, 2),
-    δ_collocated(u, x, 1, 3),
-    δ_collocated(u, x, 2, 3),
-    δ_collocated(u, x, 3, 3),
+@inline ∇_collocated(u, x) = SMatrix{3,3,eltype(u),9}(
+    δ_collocated(u, x, Val(1), Val(1)),
+    δ_collocated(u, x, Val(2), Val(1)),
+    δ_collocated(u, x, Val(3), Val(1)),
+    δ_collocated(u, x, Val(1), Val(2)),
+    δ_collocated(u, x, Val(2), Val(2)),
+    δ_collocated(u, x, Val(3), Val(2)),
+    δ_collocated(u, x, Val(1), Val(3)),
+    δ_collocated(u, x, Val(2), Val(3)),
+    δ_collocated(u, x, Val(3), Val(3)),
 )
 @inline idtensor() = SMatrix{3,3,Bool,9}(1, 0, 0, 0, 1, 0, 0, 0, 1)
 
@@ -77,8 +77,8 @@ end
 
 @kernel function velocitygradient!(∇u, u)
     x = @index(Global, Cartesian)
-    @unroll for i in 1:3
-        @unroll for j in 1:3
+    @unroll for i = 1:3
+        @unroll for j = 1:3
             ∇u[x, i, j] = δ(u, x, i, j)
         end
     end
@@ -266,9 +266,9 @@ The operation is ``f_i \\leftarrow f_i - ∂_j σ_{i j}``.
 """
 @kernel function tensordivergence!(f, σ)
     x = @index(Global, Cartesian)
-    @unroll for i in 1:3
+    @unroll for i = 1:3
         div = f[x, i]
-        @unroll for j in 1:3
+        @unroll for j = 1:3
             ei, ej = e(i), e(j)
             div -= (σ[x+(i==j)*ej, i, j] - σ[x-(i!=j)*ej, i, j]) / dx(σ.grid)
         end
@@ -284,28 +284,16 @@ The operation is ``f_i \\leftarrow f_i - ∂_j σ_{i j}``.
 """
 @kernel function tensordivergence_collocated!(f, σ)
     x = @index(Global, Cartesian)
-    @unroll for i in 1:3
+    @unroll for i = 1:3
         div = f[x, i] # add closure to existing force
-        @unroll for j in 1:3
+        @unroll for j = 1:3
             ei, ej = e(i), e(j)
             if i == j
                 σa = σ[x][i, j]
                 σb = σ[x+ei][i, j]
             else
-                σa =
-                    (
-                        σ[x][i, j] +
-                        σ[x-ej][i, j] +
-                        σ[x+ei][i, j] +
-                        σ[x+ei-ej][i, j]
-                    ) / 4
-                σb =
-                    (
-                        σ[x][i, j] +
-                        σ[x+ei+ej][i, j] +
-                        σ[x+ei][i, j] +
-                        σ[x+ej][i, j]
-                    ) / 4
+                σa = (σ[x][i, j] + σ[x-ej][i, j] + σ[x+ei][i, j] + σ[x+ei-ej][i, j]) / 4
+                σb = (σ[x][i, j] + σ[x+ei+ej][i, j] + σ[x+ei][i, j] + σ[x+ej][i, j]) / 4
             end
             div -= (σb - σa) / dx(f.grid)
         end
@@ -316,9 +304,9 @@ end
 "Divergence first, then interpolate"
 @kernel function tensordivergence_collocated_2!(f, σ)
     x = @index(Global, Cartesian)
-    @unroll for i in 1:3
+    @unroll for i = 1:3
         div = f[x, i] # add closure to existing force
-        @unroll for j in 1:3
+        @unroll for j = 1:3
             ei, ej = e(i), e(j)
             if i == j
                 div -= (σ[x+ej][i, j] - σ[x][i, j]) / dx(f.grid)
