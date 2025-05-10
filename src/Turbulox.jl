@@ -23,9 +23,10 @@ export Position, Center, XFace, YFace, ZFace, XEdge, YEdge, ZEdge, Corner
 export Grid, order, dx, get_axis, apply!
 export ScalarField, VectorField, collocated_tensorfield, TensorField, randomfield
 export poissonsolver,
-    project!, divergence!, convdiff, conv, lap, tensorapply!, stresstensor!
+    project!, divergence!, convdiff, conv, lap, diffusion, tensorapply!, stresstensor!
 export desymmetrize!,
     pol_tensor_stag!, tensorproduct_stag!, tensorproduct_coll!, tensordivergence!
+export symmetrize!
 export tophat, gaussian, applyfilter!
 export propose_timestep, timestep!
 export spectral_stuff, spectrum, get_scale_numbers

@@ -63,24 +63,38 @@ end
         # for a divergence-free field
         u = randomfield(grid, solver!) # Divergence-free
         du = zero(u)
-        apply!(convection!, grid, du, u)
-        dE = dot(u, du) / grid.n^3
+        apply!(tensorapply!, grid, conv, du, u)
+        dE = dot(u.data, du.data) / grid.n^3
         @test abs(dE) < 1e-12
         # Test that it is not skew-symmetric for a non-divergence-free field
         # This is because we use the divergence-form
         # (see Morinishi et al. 1998)
         u = VectorField(grid, randn(grid.n, grid.n, grid.n, 3)) # Non-divergence-free
         du = zero(u)
-        apply!(convection!, grid, du, u)
-        dE = dot(u, du) / grid.n^3
+        apply!(tensorapply!, grid, conv, du, u)
+        dE = dot(u.data, du.data) / grid.n^3
         @test abs(dE) > 1e-12
         # Check that the diffusion operator is dissipative
         u = VectorField(grid, randn(grid.n, grid.n, grid.n, 3)) # Non-divergence-free
         du = zero(u)
-        apply!(diffusion!, grid, du, u, 1e-3)
+        apply!(tensorapply!, grid, diffusion, du, u, 1e-3)
         dE = dot(u, du) / grid.n^3
         @test dE < 0
     end
+end
+
+@testitem "Stress tensor" begin
+    grid = Grid(; L = 1.0, n = 16)
+    u = VectorField(grid, randn(grid.n, grid.n, grid.n, 3))
+    r = TensorField(grid)
+    f1 = VectorField(grid)
+    f2 = VectorField(grid)
+    visc = 0.001
+    apply!(tensorapply!, u.grid, convdiff, f1, u, visc)
+    # Tensor
+    apply!(stresstensor!, g_les, r, u, visc)
+    apply!(tensordivergence!, g_les, du2, r)
+    du1.data - du2.data |> extrema
 end
 
 @testitem "Eddy viscosity" begin

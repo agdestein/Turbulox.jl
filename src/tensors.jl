@@ -59,17 +59,20 @@ end
     end
 end
 
-@inline ∇_collocated(u, x) = SMatrix{3,3,eltype(u),9}(
-    δ_collocated(u, x, Val(1), Val(1)),
-    δ_collocated(u, x, Val(2), Val(1)),
-    δ_collocated(u, x, Val(3), Val(1)),
-    δ_collocated(u, x, Val(1), Val(2)),
-    δ_collocated(u, x, Val(2), Val(2)),
-    δ_collocated(u, x, Val(3), Val(2)),
-    δ_collocated(u, x, Val(1), Val(3)),
-    δ_collocated(u, x, Val(2), Val(3)),
-    δ_collocated(u, x, Val(3), Val(3)),
-)
+@inline function ∇_collocated(u, I)
+    x, y, z = X(), Y(), Z()
+    SMatrix{3,3,eltype(u),9}(
+        δ_collocated(u, I, x, x),
+        δ_collocated(u, I, y, x),
+        δ_collocated(u, I, z, x),
+        δ_collocated(u, I, x, y),
+        δ_collocated(u, I, y, y),
+        δ_collocated(u, I, z, y),
+        δ_collocated(u, I, x, z),
+        δ_collocated(u, I, y, z),
+        δ_collocated(u, I, z, z),
+    )
+end
 @inline idtensor() = SMatrix{3,3,Bool,9}(1, 0, 0, 0, 1, 0, 0, 0, 1)
 
 @inline unittensor(i, j) =
@@ -134,26 +137,39 @@ end
     diss[x] = -dot(σ[x], S)
 end
 
-@kernel function tensordissipation_staggered!(diss, σ, u)
-    x = @index(Global, Cartesian)
-    d = zero(eltype(diss))
-    @unroll for i = 1:3
-        @unroll for j = 1:3
-            ei, ej = e(i), e(j)
-            if i == j
-                d -= σ[x, i, j] * δ(u, x, i, j)
-            else
-                d -=
-                    (
-                        σ[x, i, j] * strain(u, x, i, j) +
-                        σ[x-ei, i, j] * strain(u, x - ei, i, j) +
-                        σ[x-ej, i, j] * strain(u, x - ej, i, j) +
-                        σ[x-ei-ej, i, j] * strain(u, x - ei - ej, i, j)
-                    ) / 4
-            end
-        end
+@inline function dissipation(σ, u, x, i, j)
+    ei, ej = e(i), e(j)
+    if i == j
+        σ[i, j][x] * δ(u[i], x, j)
+    else
+        (
+            σ[i, j][x] * strain(u, x, i, j) +
+            σ[i, j][x-ei] * strain(u, x - ei, i, j) +
+            σ[i, j][x-ej] * strain(u, x - ej, i, j) +
+            σ[i, j][x-ei-ej] * strain(u, x - ei - ej, i, j)
+        ) / 4
+        # -(
+        #     σ[i, j][x] * δ(u[i], x, j) +
+        #     σ[i, j][x-ei] * δ(u[i], x - ei, j) +
+        #     σ[i, j][x-ej] * δ(u[i], x - ej, j) +
+        #     σ[i, j][x-ei-ej] * δ(u[i], x - ei - ej, j)
+        # ) / 4
     end
-    diss[x] = d
+end
+
+@kernel function tensordissipation_staggered!(diss, σ, u)
+    I = @index(Global, Cartesian)
+    x, y, z = X(), Y(), Z()
+    diss[I] =
+        dissipation(σ, u, I, x, x) +
+        dissipation(σ, u, I, y, x) +
+        dissipation(σ, u, I, z, x) +
+        dissipation(σ, u, I, x, y) +
+        dissipation(σ, u, I, y, y) +
+        dissipation(σ, u, I, z, y) +
+        dissipation(σ, u, I, x, z) +
+        dissipation(σ, u, I, y, z) +
+        dissipation(σ, u, I, z, z)
 end
 
 @inline function invariants(∇u)
@@ -235,7 +251,7 @@ end
     τ[x] = τx
 end
 
-@inline strain(u, x, i, j) = (δ(u, x, i, j) + δ(u, x, j, i)) / 2
+@inline strain(u, x, i, j) = (δ(u[i], x, j) + δ(u[j], x, i)) / 2
 
 @kernel function strain!(S, u)
     x = @index(Global, Cartesian)
@@ -265,15 +281,11 @@ Subtract result from existing force field ``f``.
 The operation is ``f_i \\leftarrow f_i - ∂_j σ_{i j}``.
 """
 @kernel function tensordivergence!(f, σ)
-    x = @index(Global, Cartesian)
-    @unroll for i = 1:3
-        div = f[x, i]
-        @unroll for j = 1:3
-            ei, ej = e(i), e(j)
-            div -= (σ[x+(i==j)*ej, i, j] - σ[x-(i!=j)*ej, i, j]) / dx(σ.grid)
-        end
-        f[x, i] = div
-    end
+    I = @index(Global, Cartesian)
+    x, y, z = X(), Y(), Z()
+    f[x][I] -= δ(σ[x, x], I, x) + δ(σ[x, y], I, y) + δ(σ[x, z], I, z)
+    f[y][I] -= δ(σ[y, x], I, x) + δ(σ[y, y], I, y) + δ(σ[y, z], I, z)
+    f[z][I] -= δ(σ[z, x], I, x) + δ(σ[z, y], I, y) + δ(σ[z, z], I, z)
 end
 
 """
@@ -322,4 +334,18 @@ end
         end
         f[x, i] = div
     end
+end
+
+function symmetrize!(σsymm, σ)
+    x, y, z = X(), Y(), Z()
+    σsymm[x, x].data .= σ[x, x].data
+    σsymm[y, y].data .= σ[y, y].data
+    σsymm[z, z].data .= σ[z, z].data
+    σsymm[x, y].data .= (σ[x, y].data .+ σ[y, x].data) ./ 2
+    σsymm[x, z].data .= (σ[x, z].data .+ σ[z, x].data) ./ 2
+    σsymm[y, z].data .= (σ[y, z].data .+ σ[z, y].data) ./ 2
+    σsymm[y, x].data .= σsymm[x, y].data
+    σsymm[z, x].data .= σsymm[x, z].data
+    σsymm[z, y].data .= σsymm[y, z].data
+    σsymm
 end

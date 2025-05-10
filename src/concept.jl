@@ -130,6 +130,10 @@ Adapt.adapt_structure(to, u::ScalarField) =
 Adapt.adapt_structure(to, u::VectorField) = VectorField(u.grid, adapt(to, u.data))
 Adapt.adapt_structure(to, u::TensorField) = TensorField(u.grid, adapt(to, u.data))
 
+Base.parent(u::ScalarField) = u.data
+Base.parent(u::VectorField) = u.data
+Base.parent(u::TensorField) = u.data
+
 Base.size(u::ScalarField) = size(u.data)
 Base.size(u::VectorField) = size(u.data)
 Base.size(u::TensorField) = size(u.data)

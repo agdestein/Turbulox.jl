@@ -48,7 +48,7 @@ let
     ∇u = collocated_tensorfield(grid)
     q = ScalarField(grid)
     Gmag = ScalarField(grid)
-    q_cpu = q |> Array
+    q_cpu = q.data |> Array
     pvd = paraview_collection("$outdir/q")
     while t < tmax
         Δt = T(0.85) * propose_timestep(u, visc)

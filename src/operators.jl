@@ -32,10 +32,9 @@ Put the result in `div`.
 divergence!
 
 @kernel function divergence!(div, u)
-    x = @index(Global, Cartesian)
-    div[x] = sum(directions()) do j
-        δ(u[j], x, j)
-    end
+    I = @index(Global, Cartesian)
+    x, y, z = X(), Y(), Z()
+    div[I] = δ(u[x], I, x) + δ(u[y], I, y) + δ(u[z], I, z)
 end
 
 "Get convection-diffusion stress tensor component `i,j`."
@@ -55,23 +54,25 @@ end
 end
 
 @kernel function stresstensor!(r, u, visc)
-    x = @index(Global, Cartesian)
-    r[x, 1, 1] = stress(u, x, 1, 1, visc)
-    r[x, 2, 2] = stress(u, x, 2, 2, visc)
-    r[x, 3, 3] = stress(u, x, 3, 3, visc)
-    r[x, 1, 2] = r[x, 2, 1] = stress(u, x, 1, 2, visc)
-    r[x, 1, 3] = r[x, 3, 1] = stress(u, x, 1, 3, visc)
-    r[x, 2, 3] = r[x, 3, 2] = stress(u, x, 2, 3, visc)
+    I = @index(Global, Cartesian)
+    x, y, z = X(), Y(), Z()
+    r[x, x][I] = stress(u, I, x, x, visc)
+    r[y, y][I] = stress(u, I, y, y, visc)
+    r[z, z][I] = stress(u, I, z, z, visc)
+    r[x, y][I] = r[y, x][I] = stress(u, I, x, y, visc)
+    r[x, z][I] = r[z, x][I] = stress(u, I, x, z, visc)
+    r[y, z][I] = r[z, y][I] = stress(u, I, y, z, visc)
 end
 
 @kernel function stresstensor_symm!(r, u, visc)
-    x = @index(Global, Cartesian)
-    r[x, 1] = stress(u, x, 1, 1, visc)
-    r[x, 2] = stress(u, x, 2, 2, visc)
-    r[x, 3] = stress(u, x, 3, 3, visc)
-    r[x, 4] = stress(u, x, 1, 2, visc)
-    r[x, 5] = stress(u, x, 1, 3, visc)
-    r[x, 6] = stress(u, x, 2, 3, visc)
+    I = @index(Global, Cartesian)
+    x, y, z = X(), Y(), Z()
+    r[I, 1] = stress(u, I, x, x, visc)
+    r[I, 2] = stress(u, I, y, y, visc)
+    r[I, 3] = stress(u, I, z, z, visc)
+    r[I, 4] = stress(u, I, x, y, visc)
+    r[I, 5] = stress(u, I, x, z, visc)
+    r[I, 6] = stress(u, I, y, z, visc)
 end
 
 "Approximate the convective force ``\\partial_j (u_i u_j)``."
@@ -107,6 +108,8 @@ end
     end
     diff
 end
+
+@inline diffusion(u, x, i, j, visc) = visc * lap(u, x, i, j)
 
 @inline convdiff(u, x, i, j, visc) = -conv(u, x, i, j) + visc * lap(u, x, i, j)
 
@@ -286,7 +289,7 @@ function get_scale_numbers(u, visc)
     L = let
         K = div(n, 2)
         uhat = fft(u.data, 1:3)
-        uhat = uhat[ntuple(i->1:K, 3)..., :]
+        uhat = uhat[ntuple(i -> 1:K, 3)..., :]
         e = abs2.(uhat) ./ (2 * (n^3)^2)
         kx = reshape(0:(K-1), :)
         ky = reshape(0:(K-1), 1, :)
@@ -306,4 +309,13 @@ function get_scale_numbers(u, visc)
     Re_tay = λ * uavg / sqrt(T(3)) / visc
     Re_kol = eta * uavg / sqrt(T(3)) / visc
     (; uavg, D, L, λ, eta, t_int, t_tay, t_kol, Re_int, Re_tay, Re_kol)
+end
+
+@kernel function collocate_velocity2!(ucoll, u)
+    I = @index(Global, Cartesian)
+    x, y, z = X(), Y(), Z()
+    ux = interpolate(u[x], I, x)
+    uy = interpolate(u[y], I, y)
+    uz = interpolate(u[z], I, z)
+    ucoll[I] = SVector(ux, uy, uz)
 end

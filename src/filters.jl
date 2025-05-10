@@ -84,111 +84,101 @@ function applyfilter!(v, u, grid, filter, compression, Δ, ::Stag, ::Stag)
     r = div(compression, 2)
     for j = 1:3, i = 1:3
         offset = CartesianIndex(ntuple(k -> (i != j) && (k == i || k == j) ? 0 : -r, 3))
-        v_ij, u_ij = view(v,:,:,:,i,j), view(u,:,:,:,i,j)
+        v_ij, u_ij = view(v, :, :, :, i, j), view(u, :, :, :, i, j)
         convolve!(backend, workgroupsize)(v_ij, u_ij, kernel, offset; ndrange = size(v_ij))
     end
     KernelAbstractions.synchronize(backend)
     kernel
 end
 
-function volumefilter_vector!(uH, uh, gH, gh, comp)
-    (; n, backend, workgroupsize) = gH
-    @kernel function Φ!(uH, uh, i, volume)
+"Get fine grid offset indices corresponding to coarse grid index at position."
+fineline(::Stag, comp) = (a = div(comp, 2); (a+1):(comp+a))
+fineline(::Coll, comp) = 1:comp
+
+finepoint(::Stag, comp) = comp:comp
+finepoint(::Coll, comp) = (a = div(comp, 2); (a+1):(a+1))
+
+function volumefilter!(uH::ScalarField, uh::ScalarField, comp)
+    (; grid, position) = uH
+    (; n, backend, workgroupsize) = grid
+    @kernel function Φ!(uH, uh, volume)
         x = @index(Global, Cartesian)
         y = comp * (x - oneunit(x))
         s = zero(eltype(uH))
         for r in volume
-            s += uh[y+r|>gh, i]
+            s += uh[y+r]
         end
-        uH[x, i] = s / comp^3
+        uH[x] = s / comp^3
     end
-    for i = 1:3
-        ndrange = n, n, n
-        a = div(comp, 2)
-        volume = CartesianIndices(ntuple(j -> i == j ? ((a+1):(comp+a)) : (1:comp), 3))
-        Φ!(backend, workgroupsize)(uH, uh, i, volume; ndrange)
-    end
+    ndrange = n, n, n
+    volume = CartesianIndices(map(i -> fineline(position[i], comp), directions()))
+    Φ!(backend, workgroupsize)(uH, uh, volume; ndrange)
     uH
 end
+volumefilter!(uH::VectorField, uh::VectorField, comp) =
+    for i in directions()
+        volumefilter!(uH[i], uh[i], comp)
+    end
+volumefilter!(uH::TensorField, uh::TensorField, comp) =
+    for j in directions(), i in directions()
+        volumefilter!(uH[i, j], uh[i, j], comp)
+    end
 
-"Volume-average staggered tensor field."
-function volumefilter_tensor!(rH, rh, gH, gh, comp)
-    (; n, backend, workgroupsize) = gH
-    @kernel function Φ!(rH, rh, i, j, volume)
+"Filter without reducing the grid size."
+function volumefilter_explicit!(uH::ScalarField, uh::ScalarField, comp)
+    (; grid, position) = uH
+    (; n, backend, workgroupsize) = grid
+    @kernel function Φ!(uH, uh, volume)
         x = @index(Global, Cartesian)
-        y = comp * (x - oneunit(x))
-        s = zero(eltype(rH))
+        s = zero(eltype(uH))
         for r in volume
-            s += rh[y+r|>gh, i, j]
+            s += uh[x+r]
         end
-        rH[x, i, j] = s / comp^3
+        uH[x] = s / comp^3
     end
-    for j = 1:3, i = 1:3
-        ndrange = n, n, n
-        a = div(comp, 2)
-        volume = if i == j
-            # Filter to coarse volume center
-            CartesianIndices(ntuple(Returns(1:comp), 3))
-        else
-            # Filter to coarse corner in ij-section of volume
-            CartesianIndices(ntuple(k -> k == i || k == j ? ((a+1):(comp+a)) : (1:comp), 3))
-        end
-        Φ!(backend, workgroupsize)(rH, rh, i, j, volume; ndrange)
-    end
-    rH
+    ndrange = n, n, n
+    a = div(comp, 2)
+    volume = CartesianIndices(ntuple(Returns(-a:a), 3))
+    Φ!(backend, workgroupsize)(uH, uh, volume; ndrange)
+    uH
 end
+volumefilter_explicit!(uH::VectorField, uh::VectorField, comp) =
+    for i in directions()
+        volumefilter_explicit!(uH[i], uh[i], comp)
+    end
+volumefilter_explicit!(uH::TensorField, uh::TensorField, comp) =
+    for j in directions(), i in directions()
+        volumefilter_explicit!(uH[i, j], uh[i, j], comp)
+    end
 
-function surfacefilter_vector!(uH, uh, gH, gh, comp)
-    (; n, backend, workgroupsize) = gH
-    @kernel function Φ!(uH, uh, i, face)
+function surfacefilter!(uH::ScalarField, uh::ScalarField, comp, i)
+    (; grid, position) = uH
+    (; n, backend, workgroupsize) = grid
+    @kernel function Φ!(uH, uh, face)
         x = @index(Global, Cartesian)
         y = comp * (x - oneunit(x))
         s = zero(eltype(uH))
         for r in face
-            s += uh[y+r, i]
+            s += uh[y+r]
         end
-        uH[x, i] = s / comp^2
+        uH[x] = s / comp^2
     end
-    for i = 1:3
-        ndrange = n, n, n
-        face = CartesianIndices(ntuple(j -> j == i ? (comp:comp) : (1:comp), 3))
-        Φ!(backend, workgroupsize)(uH, uh, i, face; ndrange)
-    end
+    ndrange = n, n, n
+    face = CartesianIndices(
+        map(
+            j -> j == i ? finepoint(position[j], comp) : fineline(position[j], comp),
+            directions(),
+        ),
+    )
+    Φ!(backend, workgroupsize)(uH, uh, face; ndrange)
     uH
 end
-
-"Surface-average staggered tensor field."
-function surfacefilter_tensor!(rH, rh, gH, gh, comp, filter_i)
-    (; n, backend, workgroupsize) = gH
-    @kernel function Φ!(rH, rh, i, j, face)
-        x = @index(Global, Cartesian)
-        y = comp * (x - oneunit(x))
-        s = zero(eltype(rH))
-        for r in face
-            s += rh[y+r|>gh, i, j]
-        end
-        rH[x, i, j] = s / comp^2
+surfacefilter!(uH::VectorField, uh::VectorField, comp) =
+    for i in directions()
+        surfacefilter!(uH[i], uh[i], comp, i)
     end
-    for j = 1:3, i = 1:3
-        ndrange = n, n, n
+surfacefilter!(uH::TensorField, uh::TensorField, comp, filter_i) =
+    for j in directions(), i in directions()
         k = filter_i ? i : j
-        a = div(comp, 2)
-        face = if i == j
-            # Filter to coarse volume center
-            CartesianIndices(ntuple(l -> l == k ? ((a+1):(a+1)) : (1:comp), 3))
-        else
-            # Filter to coarse corner in ij-section of volume
-            ntuple(3) do l
-                if l == k
-                    comp:comp
-                elseif l == i || l == j
-                    (a+1):(comp+a)
-                else
-                    1:comp
-                end
-            end |> CartesianIndices
-        end
-        Φ!(backend, workgroupsize)(rH, rh, i, j, face; ndrange)
+        surfacefilter!(uH[i, j], uh[i, j], comp, k)
     end
-    rH
-end
