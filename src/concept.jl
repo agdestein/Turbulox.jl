@@ -1,33 +1,6 @@
 "Get value from `Val`."
 @inline getval(::Val{x}) where {x} = x
 
-"1D staggered grid position (at the right boundary of a volume in a given direction)."
-struct Stag end
-
-"1D collocated grid position (at the volume center in a given direction)."
-struct Coll end
-
-"Position in a 3D finite volume."
-struct Position{P1,P2,P3} end
-const Center = Position{Coll,Coll,Coll}
-const Face1 = Position{Stag,Coll,Coll}
-const Face2 = Position{Coll,Stag,Coll}
-const Face3 = Position{Coll,Coll,Stag}
-const Edge1 = Position{Coll,Stag,Stag}
-const Edge2 = Position{Stag,Coll,Stag}
-const Edge3 = Position{Stag,Stag,Coll}
-const Corner = Position{Stag,Stag,Stag}
-
-const X = Val{1}
-const Y = Val{2}
-const Z = Val{3}
-
-Base.getindex(::Position{P1,P2,P3}, ::X) where {P1,P2,P3} = P1()
-Base.getindex(::Position{P1,P2,P3}, ::Y) where {P1,P2,P3} = P2()
-Base.getindex(::Position{P1,P2,P3}, ::Z) where {P1,P2,P3} = P3()
-
-@inline directions() = Val(1), Val(2), Val(3)
-
 "Staggered grid of half order `ho`."
 @kwdef struct Grid{H,T,B}
     "Number of terms in discretization (half of order). Default is `Val(1)`."
@@ -58,14 +31,44 @@ Base.show(io::IO, g::Grid) =
 "Get grid spacing."
 @inline dx(g::Grid) = g.L / g.n
 
-"Get unit index in dimension `i`."
-@inline e(::Val{1}) = CartesianIndex(1, 0, 0)
-@inline e(::Val{2}) = CartesianIndex(0, 1, 0)
-@inline e(::Val{3}) = CartesianIndex(0, 0, 1)
-
 # Extend index periodically so that it stays within the domain.
 @inline (g::Grid)(i::Integer) = mod1(i, g.n)
 # @inline (g::Grid)(x::CartesianIndex) = CartesianIndex(map(g, x.I))
+
+"1D staggered grid position (at the right boundary of a volume in a given direction)."
+struct Stag end
+
+"1D collocated grid position (at the volume center in a given direction)."
+struct Coll end
+
+"Position in a 3D finite volume."
+struct Position{P1,P2,P3} end
+const Center = Position{Coll,Coll,Coll}
+const Face1 = Position{Stag,Coll,Coll}
+const Face2 = Position{Coll,Stag,Coll}
+const Face3 = Position{Coll,Coll,Stag}
+const Edge1 = Position{Coll,Stag,Stag}
+const Edge2 = Position{Stag,Coll,Stag}
+const Edge3 = Position{Stag,Stag,Coll}
+const Corner = Position{Stag,Stag,Stag}
+
+struct Direction{i} end
+@inline Direction(i) = Direction{i}()
+
+const X = Direction{1}
+const Y = Direction{2}
+const Z = Direction{3}
+
+Base.getindex(::Position{P1,P2,P3}, ::X) where {P1,P2,P3} = P1()
+Base.getindex(::Position{P1,P2,P3}, ::Y) where {P1,P2,P3} = P2()
+Base.getindex(::Position{P1,P2,P3}, ::Z) where {P1,P2,P3} = P3()
+
+@inline directions() = Val(1), Val(2), Val(3)
+
+"Get unit index in dimension `i`."
+@inline e(::X) = CartesianIndex(1, 0, 0)
+@inline e(::Y) = CartesianIndex(0, 1, 0)
+@inline e(::Z) = CartesianIndex(0, 0, 1)
 
 "Get grid points along axis."
 get_axis(g::Grid, ::Stag) = range(0, g.L, g.n + 1)[2:end]
@@ -125,69 +128,93 @@ struct TensorField{T,G,D} <: AbstractArray{T,5}
     ) = new{eltype(data),typeof(grid),typeof(data)}(grid, data)
 end
 
+struct LazyScalarField{T,P,G,F,S} <: AbstractArray{T,3}
+    position::P
+    grid::G
+    func::F
+    stuff::S
+    LazyScalarField(position, grid, func, stuff...) =
+        new{typeof(grid.L),typeof(position),typeof(grid),typeof(func),typeof(stuff)}(
+            position,
+            grid,
+            func,
+            stuff,
+        )
+    LazyScalarField(grid, func, stuff...) = LazyScalarField(Center(), grid, func, stuff...)
+end
+
 Adapt.adapt_structure(to, u::ScalarField) =
     ScalarField(u.position, u.grid, adapt(to, u.data))
 Adapt.adapt_structure(to, u::VectorField) = VectorField(u.grid, adapt(to, u.data))
 Adapt.adapt_structure(to, u::TensorField) = TensorField(u.grid, adapt(to, u.data))
+Adapt.adapt_structure(to, u::LazyScalarField) =
+    LazyScalarField(u.position, u.grid, u.func, adapt(to, u.stuff))
 
 Base.parent(u::ScalarField) = u.data
 Base.parent(u::VectorField) = u.data
 Base.parent(u::TensorField) = u.data
+Base.parent(u::LazyScalarField) = u.stuff
 
 Base.size(u::ScalarField) = size(u.data)
 Base.size(u::VectorField) = size(u.data)
 Base.size(u::TensorField) = size(u.data)
+Base.size(u::LazyScalarField) = u.grid.n, u.grid.n, u.grid.n
 
 Base.show(io::IO, u::ScalarField) =
     print(io, "ScalarField($(u.position), $(u.grid), ::$(typeof(u.data)))")
 Base.show(io::IO, u::VectorField) = print(io, "VectorField($(u.grid), ::$(typeof(u.data)))")
 Base.show(io::IO, u::TensorField) = print(io, "TensorField($(u.grid), ::$(typeof(u.data)))")
+Base.show(io::IO, u::LazyScalarField) = print(
+    io,
+    "LazyScalarField(",
+    join((u.position, u.grid, u.func, map(s -> "::$(typeof(s))", u.stuff)), ", ")...,
+    ")",
+)
+
 Base.show(io::IO, ::MIME"text/plain", u::ScalarField) =
     print(io, join(map(string, size(u.data)), "×"), " ", u)
 Base.show(io::IO, ::MIME"text/plain", u::VectorField) =
     print(io, join(map(string, size(u.data)), "×"), " ", u)
 Base.show(io::IO, ::MIME"text/plain", u::TensorField) =
     print(io, join(map(string, size(u.data)), "×"), " ", u)
+Base.show(io::IO, ::MIME"text/plain", u::LazyScalarField) =
+    print(io, join(map(string, size(u.data)), "×"), " ", u)
 
-Base.getindex(u::ScalarField, i::Int) = u.data[i]
-Base.getindex(u::VectorField, i::Int) = u.data[i]
-Base.getindex(u::TensorField, i::Int) = u.data[i]
 Base.getindex(u::ScalarField, I::Vararg{Int,3}) = u.data[map(u.grid, I)...]
 Base.getindex(u::VectorField, I::Vararg{Int,4}) = u.data[map(u.grid, I[1:3])..., I[4]]
 Base.getindex(u::TensorField, I::Vararg{Int,5}) = u.data[map(u.grid, I[1:3])..., I[4], I[5]]
+Base.getindex(u::LazyScalarField, I::Vararg{Int,3}) = u.func(u.stuff..., I)
 
-Base.setindex!(u::ScalarField, val, i::Int) = setindex!(u.data, val, i)
-Base.setindex!(u::VectorField, val, i::Int) = setindex!(u.data, val, i)
-Base.setindex!(u::TensorField, val, i::Int) = setindex!(u.data, val, i)
 Base.setindex!(u::ScalarField, val, I::Vararg{Int,3}) =
     setindex!(u.data, val, map(u.grid, I)...)
 Base.setindex!(u::VectorField, val, I::Vararg{Int,4}) =
     setindex!(u.data, val, map(u.grid, I[1:3])..., I[4])
 Base.setindex!(u::TensorField, val, I::Vararg{Int,5}) =
     setindex!(u.data, val, map(u.grid, I[1:3])..., I[4], I[5])
+# No modifying of lazy fields.
 
-Base.getindex(u::VectorField, ::X) = ScalarField(Face1(), u.grid, view(u.data,:,:,:,1))
-Base.getindex(u::VectorField, ::Y) = ScalarField(Face2(), u.grid, view(u.data,:,:,:,2))
-Base.getindex(u::VectorField, ::Z) = ScalarField(Face3(), u.grid, view(u.data,:,:,:,3))
+Base.getindex(u::VectorField, ::X) = ScalarField(Face1(), u.grid, view(u.data, :, :, :, 1))
+Base.getindex(u::VectorField, ::Y) = ScalarField(Face2(), u.grid, view(u.data, :, :, :, 2))
+Base.getindex(u::VectorField, ::Z) = ScalarField(Face3(), u.grid, view(u.data, :, :, :, 3))
 
 Base.getindex(u::TensorField, ::X, ::X) =
-    ScalarField(Center(), u.grid, view(u.data,:,:,:,1,1))
+    ScalarField(Center(), u.grid, view(u.data, :, :, :, 1, 1))
 Base.getindex(u::TensorField, ::Y, ::X) =
-    ScalarField(Edge3(), u.grid, view(u.data,:,:,:,2,1))
+    ScalarField(Edge3(), u.grid, view(u.data, :, :, :, 2, 1))
 Base.getindex(u::TensorField, ::Z, ::X) =
-    ScalarField(Edge2(), u.grid, view(u.data,:,:,:,3,1))
+    ScalarField(Edge2(), u.grid, view(u.data, :, :, :, 3, 1))
 Base.getindex(u::TensorField, ::X, ::Y) =
-    ScalarField(Edge3(), u.grid, view(u.data,:,:,:,1,2))
+    ScalarField(Edge3(), u.grid, view(u.data, :, :, :, 1, 2))
 Base.getindex(u::TensorField, ::Y, ::Y) =
-    ScalarField(Center(), u.grid, view(u.data,:,:,:,2,2))
+    ScalarField(Center(), u.grid, view(u.data, :, :, :, 2, 2))
 Base.getindex(u::TensorField, ::Z, ::Y) =
-    ScalarField(Edge1(), u.grid, view(u.data,:,:,:,3,2))
+    ScalarField(Edge1(), u.grid, view(u.data, :, :, :, 3, 2))
 Base.getindex(u::TensorField, ::X, ::Z) =
-    ScalarField(Edge2(), u.grid, view(u.data,:,:,:,1,3))
+    ScalarField(Edge2(), u.grid, view(u.data, :, :, :, 1, 3))
 Base.getindex(u::TensorField, ::Y, ::Z) =
-    ScalarField(Edge1(), u.grid, view(u.data,:,:,:,2,3))
+    ScalarField(Edge1(), u.grid, view(u.data, :, :, :, 2, 3))
 Base.getindex(u::TensorField, ::Z, ::Z) =
-    ScalarField(Center(), u.grid, view(u.data,:,:,:,3,3))
+    ScalarField(Center(), u.grid, view(u.data, :, :, :, 3, 3))
 
 function Base.similar(u::ScalarField, ::Type{T}, dims::Dims) where {T}
     @assert dims == size(u.data) "Scalar field must have same size as grid."
