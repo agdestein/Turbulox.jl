@@ -48,13 +48,13 @@ end
 @inline function δ_collocated(u, x, i, j)
     ei, ej = e(i), e(j)
     if i == j
-        δ(u[i], x, j)
+        δ(u[i], j, x)
     else
         (
-            δ(u[i], x, j) +
-            δ(u[i], x - ej, j) +
-            δ(u[i], x - ei, j) +
-            δ(u[i], x - ei - ej, j)
+            δ(u[i], j, x) +
+            δ(u[i], j, x - ej) +
+            δ(u[i], j, x - ei) +
+            δ(u[i], j, x - ei - ej)
         ) / 4
     end
 end
@@ -82,7 +82,7 @@ end
     x = @index(Global, Cartesian)
     @unroll for i = 1:3
         @unroll for j = 1:3
-            ∇u[x, i, j] = δ(u, x, i, j)
+            ∇u[x, i, j] = δ(u[i], j, x)
         end
     end
 end
@@ -140,19 +140,19 @@ end
 @inline function dissipation(σ, u, x, i, j)
     ei, ej = e(i), e(j)
     if i == j
-        σ[i, j][x] * δ(u[i], x, j)
+        σ[i, j][x] * δ(u[i], j, x)
     else
         (
-            σ[i, j][x] * strain(u, x, i, j) +
-            σ[i, j][x-ei] * strain(u, x - ei, i, j) +
-            σ[i, j][x-ej] * strain(u, x - ej, i, j) +
-            σ[i, j][x-ei-ej] * strain(u, x - ei - ej, i, j)
+            σ[i, j][x] *       strain(u, i, j, x          ) +
+            σ[i, j][x-ei] *    strain(u, i, j, x - ei     ) +
+            σ[i, j][x-ej] *    strain(u, i, j, x - ej     ) +
+            σ[i, j][x-ei-ej] * strain(u, i, j, x - ei - ej)
         ) / 4
         # -(
-        #     σ[i, j][x] * δ(u[i], x, j) +
-        #     σ[i, j][x-ei] * δ(u[i], x - ei, j) +
-        #     σ[i, j][x-ej] * δ(u[i], x - ej, j) +
-        #     σ[i, j][x-ei-ej] * δ(u[i], x - ei - ej, j)
+        #     σ[i, j][x] * δ(u[i], j, x) +
+        #     σ[i, j][x-ei] * δ(u[i], j, x - ei) +
+        #     σ[i, j][x-ej] * δ(u[i], j, x - ej) +
+        #     σ[i, j][x-ei-ej] * δ(u[i], j, x - ei - ej)
         # ) / 4
     end
 end
@@ -251,13 +251,13 @@ end
     τ[x] = τx
 end
 
-@inline strain(u, x, i, j) = (δ(u[i], x, j) + δ(u[j], x, i)) / 2
+@inline strain(u, i, j, x) = (δ(u[i], j, x) + δ(u[j], i, x)) / 2
 
 @kernel function strain!(S, u)
     x = @index(Global, Cartesian)
     @unroll for i = 1:3
         @unroll for j = 1:3
-            S[x, i, j] = strain(u, x, i, j)
+            S[x, i, j] = strain(u, i, j, x)
         end
     end
 end
@@ -283,9 +283,9 @@ The operation is ``f_i \\leftarrow f_i - ∂_j σ_{i j}``.
 @kernel function tensordivergence!(f, σ)
     I = @index(Global, Cartesian)
     x, y, z = X(), Y(), Z()
-    f[x][I] -= δ(σ[x, x], I, x) + δ(σ[x, y], I, y) + δ(σ[x, z], I, z)
-    f[y][I] -= δ(σ[y, x], I, x) + δ(σ[y, y], I, y) + δ(σ[y, z], I, z)
-    f[z][I] -= δ(σ[z, x], I, x) + δ(σ[z, y], I, y) + δ(σ[z, z], I, z)
+    f[x][I] -= δ(σ[x, x], x, I) + δ(σ[x, y], y, I) + δ(σ[x, z], z, I)
+    f[y][I] -= δ(σ[y, x], x, I) + δ(σ[y, y], y, I) + δ(σ[y, z], z, I)
+    f[z][I] -= δ(σ[z, x], x, I) + δ(σ[z, y], y, I) + δ(σ[z, z], z, I)
 end
 
 """

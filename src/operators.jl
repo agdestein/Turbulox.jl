@@ -7,23 +7,23 @@
     19845 // 16384, -2205 // 8192, 567 // 8192, -405 // 32768, 35 // 32768
 
 "Compute finite difference δ_i u(x) of the order given by grid."
-@inline δ(u::ScalarField, x, i) = sum(ntuple(n -> w(u.grid)[n] * δ(n, u, x, i), u.grid.ho))
+@inline δ(u::ScalarField, i, x) = sum(ntuple(n -> w(u.grid)[n] * δ(n, u, i, x), u.grid.ho))
 
 "Compute second order finite difference ``\\delta^{(2n+1) h}_i u(x)`` of width ``(2 n + 1) h``."
-@inline δ(n::Int, u::ScalarField, x, i) = δ(n, u.position[i], u, x, i)
-@inline δ(n::Int, ::Stag, u::ScalarField, x, i) =
+@inline δ(n::Int, u::ScalarField, i, x) = δ(n, u.position[i], u, i, x)
+@inline δ(n::Int, ::Stag, u::ScalarField, i, x) =
     (u[x+(n-1)*e(i)] - u[x-n*e(i)]) / (2n - 1) / dx(u.grid)
-@inline δ(n::Int, ::Coll, u::ScalarField, x, i) =
+@inline δ(n::Int, ::Coll, u::ScalarField, i, x) =
     (u[x+n*e(i)] - u[x-(n-1)*e(i)]) / (2n - 1) / dx(u.grid)
 
 # Interpolate u[i] in direction j. Land in canonical position at x.
-@inline interpolate(n::Int, u::ScalarField, x, i) = interpolate(n, u.position[i], u, x, i)
-@inline interpolate(n::Int, ::Stag, u::ScalarField, x, i) =
+@inline interpolate(n::Int, u::ScalarField, i, x) = interpolate(n, u.position[i], u, i, x)
+@inline interpolate(n::Int, ::Stag, u::ScalarField, i, x) =
     (u[x-n*e(i)] + u[x+(n-1)*e(i)]) / 2
-@inline interpolate(n::Int, ::Coll, u::ScalarField, x, i) =
+@inline interpolate(n::Int, ::Coll, u::ScalarField, i, x) =
     (u[x-(n-1)*e(i)] + u[x+n*e(i)]) / 2
-@inline interpolate(u::ScalarField, x, i) =
-    sum(ntuple(n -> w(u.grid)[n] * interpolate(n, u, x, i), u.grid.ho))
+@inline interpolate(u::ScalarField, i, x) =
+    sum(ntuple(n -> w(u.grid)[n] * interpolate(n, u, i, x), u.grid.ho))
 
 """
 Compute divergence of vector field `u`.
@@ -34,19 +34,19 @@ divergence!
 @kernel function divergence!(div, u)
     I = @index(Global, Cartesian)
     x, y, z = X(), Y(), Z()
-    div[I] = δ(u[x], I, x) + δ(u[y], I, y) + δ(u[z], I, z)
+    div[I] = δ(u[x], x, I) + δ(u[y], y, I) + δ(u[z], z, I)
 end
 
 "Get convection-diffusion stress tensor component `i,j`."
 @inline function stress(u, x, i, j, visc)
     # Non-linear stress
-    ui_xj = interpolate(u[i], x, j)
-    uj_xi = interpolate(u[j], x, i)
+    ui_xj = interpolate(u[i], j, x)
+    uj_xi = interpolate(u[j], i, x)
     ui_uj = ui_xj * uj_xi
 
     # Strain-rate
-    δj_ui = δ(u[i], x, j)
-    δi_uj = δ(u[j], x, i)
+    δj_ui = δ(u[i], j, x)
+    δi_uj = δ(u[j], i, x)
     sij = (δj_ui + δi_uj) / 2
 
     # Resulting stress
@@ -80,12 +80,12 @@ end
     ei, ej = e(i), e(j)
 
     # ui interpolated in direction xj with grid size nh (n = 1, 3, 5, 7, 9)
-    ui_nxj_a = ntuple(n -> interpolate(n, u[i], x - (n - 1 + (i != j)) * ej, j), u.grid.ho)
-    ui_nxj_b = ntuple(n -> interpolate(n, u[i], x + (n - 1 + (i == j)) * ej, j), u.grid.ho)
+    ui_nxj_a = ntuple(n -> interpolate(n, u[i], j, x - (n - 1 + (i != j)) * ej), u.grid.ho)
+    ui_nxj_b = ntuple(n -> interpolate(n, u[i], j, x + (n - 1 + (i == j)) * ej), u.grid.ho)
 
     # uj interpolated in direction xi with order
-    uj_xi_na = ntuple(n -> interpolate(u[j], x - (n - 1 + (i != j)) * ej, i), u.grid.ho)
-    uj_xi_nb = ntuple(n -> interpolate(u[j], x + (n - 1 + (i == j)) * ej, i), u.grid.ho)
+    uj_xi_na = ntuple(n -> interpolate(u[j], i, x - (n - 1 + (i != j)) * ej), u.grid.ho)
+    uj_xi_nb = ntuple(n -> interpolate(u[j], i, x + (n - 1 + (i == j)) * ej), u.grid.ho)
 
     # Tensor product -- see  Morinishi 1998 eq. (112)
     ui_uj_na = ntuple(n -> ui_nxj_a[n] * uj_xi_na[n], u.grid.ho)
@@ -245,10 +245,11 @@ end
 pressuregradient!
 
 @kernel function pressuregradient!(u, p)
-    x = @index(Global, Cartesian)
-    u[X()][x] -= δ(p, x, X())
-    u[Y()][x] -= δ(p, x, Y())
-    u[Z()][x] -= δ(p, x, Z())
+    I = @index(Global, Cartesian)
+    x, y, z = X(), Y(), Z()
+    u[x][I] -= δ(p, x, I)
+    u[y][I] -= δ(p, y, I)
+    u[z][I] -= δ(p, z, I)
 end
 
 "Project velocity field onto divergence-free space."
@@ -311,11 +312,11 @@ function get_scale_numbers(u, visc)
     (; uavg, D, L, λ, eta, t_int, t_tay, t_kol, Re_int, Re_tay, Re_kol)
 end
 
-@kernel function collocate_velocity2!(ucoll, u)
+@kernel function collocate_velocity!(ucoll, u)
     I = @index(Global, Cartesian)
     x, y, z = X(), Y(), Z()
-    ux = interpolate(u[x], I, x)
-    uy = interpolate(u[y], I, y)
-    uz = interpolate(u[z], I, z)
+    ux = interpolate(u[x], x, I)
+    uy = interpolate(u[y], y, I)
+    uz = interpolate(u[z], z, I)
     ucoll[I] = SVector(ux, uy, uz)
 end
