@@ -12,18 +12,19 @@ desymmetrize!(r, rsym) = @. begin
 end
 
 "Interpolate staggered tensor to volume centers."
-@inline function pol_tensor_collocated(σ, x)
-    e1, e2, e3 = e(1), e(2), e(3)
-    σ11 = σ[x, 1, 1]
-    σ22 = σ[x, 2, 2]
-    σ33 = σ[x, 3, 3]
-    σ12 = (σ[x, 1, 2] + σ[x-e1, 1, 2] + σ[x-e2, 1, 2] + σ[x-e1-e2, 1, 2]) / 4
-    σ21 = (σ[x, 2, 1] + σ[x-e1, 2, 1] + σ[x-e2, 2, 1] + σ[x-e1-e2, 2, 1]) / 4
-    σ13 = (σ[x, 1, 3] + σ[x-e1, 1, 3] + σ[x-e3, 1, 3] + σ[x-e1-e3, 1, 3]) / 4
-    σ31 = (σ[x, 3, 1] + σ[x-e1, 3, 1] + σ[x-e3, 3, 1] + σ[x-e1-e3, 3, 1]) / 4
-    σ23 = (σ[x, 2, 3] + σ[x-e2, 2, 3] + σ[x-e3, 2, 3] + σ[x-e2-e3, 2, 3]) / 4
-    σ32 = (σ[x, 3, 2] + σ[x-e2, 3, 2] + σ[x-e3, 3, 2] + σ[x-e2-e3, 3, 2]) / 4
-    SMatrix{3,3,eltype(σ),9}(σ11, σ21, σ31, σ12, σ22, σ32, σ13, σ23, σ33)
+@inline function pol_tensor_collocated(σ, I)
+    x, y, z = X(), Y(), Z()
+    ex, ey, ez = e(x), e(y), e(z)
+    σxx = σ[x, y][I]
+    σyy = σ[x, y][I]
+    σzz = σ[x, y][I]
+    σxy = (σ[x, y][I] + σ[x, y][I-ex] + σ[x, y][I-ey] + σ[x, y][I-ex-ey]) / 4
+    σyx = (σ[y, x][I] + σ[y, x][I-ex] + σ[y, x][I-ey] + σ[y, x][I-ex-ey]) / 4
+    σxz = (σ[x, z][I] + σ[x, z][I-ex] + σ[x, z][I-ez] + σ[x, z][I-ex-ez]) / 4
+    σzx = (σ[z, x][I] + σ[z, x][I-ex] + σ[z, x][I-ez] + σ[z, x][I-ex-ez]) / 4
+    σyz = (σ[y, z][I] + σ[y, z][I-ey] + σ[y, z][I-ez] + σ[y, z][I-ey-ez]) / 4
+    σzy = (σ[z, y][I] + σ[z, y][I-ey] + σ[z, y][I-ez] + σ[z, y][I-ey-ez]) / 4
+    SMatrix{3,3,typeof(σxx),9}(σxx, σyx, σzx, σxy, σyy, σzy, σxz, σyz, σzz)
 end
 
 "Interpolate collocated tensor to staggered tensor."
@@ -45,51 +46,52 @@ end
     end
 end
 
-@inline function δ_collocated(u, x, i, j)
+function δ_collocated(u, i, j, I)
     ei, ej = e(i), e(j)
     if i == j
-        δ(u[i], j, x)
+        δ(u[i], j, I)
     else
         (
-            δ(u[i], j, x) +
-            δ(u[i], j, x - ej) +
-            δ(u[i], j, x - ei) +
-            δ(u[i], j, x - ei - ej)
+            δ(u[i], j, I) +
+            δ(u[i], j, I - ej) +
+            δ(u[i], j, I - ei) +
+            δ(u[i], j, I - ei - ej)
         ) / 4
     end
 end
 
-@inline function ∇_collocated(u, I)
+function ∇_collocated(u, I)
     x, y, z = X(), Y(), Z()
     SMatrix{3,3,eltype(u),9}(
-        δ_collocated(u, I, x, x),
-        δ_collocated(u, I, y, x),
-        δ_collocated(u, I, z, x),
-        δ_collocated(u, I, x, y),
-        δ_collocated(u, I, y, y),
-        δ_collocated(u, I, z, y),
-        δ_collocated(u, I, x, z),
-        δ_collocated(u, I, y, z),
-        δ_collocated(u, I, z, z),
+        δ_collocated(u, x, x, I),
+        δ_collocated(u, y, x, I),
+        δ_collocated(u, z, x, I),
+        δ_collocated(u, x, y, I),
+        δ_collocated(u, y, y, I),
+        δ_collocated(u, z, y, I),
+        δ_collocated(u, x, z, I),
+        δ_collocated(u, y, z, I),
+        δ_collocated(u, z, z, I),
     )
 end
+
 @inline idtensor() = SMatrix{3,3,Bool,9}(1, 0, 0, 0, 1, 0, 0, 0, 1)
 
 @inline unittensor(i, j) =
     SVector(ntuple(k -> i == k, 3)) * SVector(ntuple(k -> j == k, 3))'
 
 @kernel function velocitygradient!(∇u, u)
-    x = @index(Global, Cartesian)
-    @unroll for i = 1:3
-        @unroll for j = 1:3
-            ∇u[x, i, j] = δ(u[i], j, x)
-        end
-    end
-end
-
-@kernel function velocitygradient_coll!(∇u, u)
-    x = @index(Global, Cartesian)
-    ∇u[x] = ∇_collocated(u, x)
+    I = @index(Global, Cartesian)
+    x, y, z = X(), Y(), Z()
+    ∇u[x, x][I] = δ(u[x], x, I)
+    ∇u[y, x][I] = δ(u[x], y, I)
+    ∇u[z, x][I] = δ(u[x], z, I)
+    ∇u[x, y][I] = δ(u[y], x, I)
+    ∇u[y, y][I] = δ(u[y], y, I)
+    ∇u[z, y][I] = δ(u[y], z, I)
+    ∇u[x, z][I] = δ(u[z], x, I)
+    ∇u[y, z][I] = δ(u[z], y, I)
+    ∇u[z, z][I] = δ(u[z], z, I)
 end
 
 "Compute ``u v^T`` in the collocated points."
@@ -143,9 +145,9 @@ end
         σ[i, j][x] * δ(u[i], j, x)
     else
         (
-            σ[i, j][x] *       strain(u, i, j, x          ) +
-            σ[i, j][x-ei] *    strain(u, i, j, x - ei     ) +
-            σ[i, j][x-ej] *    strain(u, i, j, x - ej     ) +
+            σ[i, j][x] * strain(u, i, j, x) +
+            σ[i, j][x-ei] * strain(u, i, j, x - ei) +
+            σ[i, j][x-ej] * strain(u, i, j, x - ej) +
             σ[i, j][x-ei-ej] * strain(u, i, j, x - ei - ej)
         ) / 4
         # -(
@@ -294,46 +296,21 @@ First interpolate to staggered points.
 Subtract result from existing force field ``f``.
 The operation is ``f_i \\leftarrow f_i - ∂_j σ_{i j}``.
 """
-@kernel function tensordivergence_collocated!(f, σ)
-    x = @index(Global, Cartesian)
-    @unroll for i = 1:3
-        div = f[x, i] # add closure to existing force
-        @unroll for j = 1:3
-            ei, ej = e(i), e(j)
-            if i == j
-                σa = σ[x][i, j]
-                σb = σ[x+ei][i, j]
-            else
-                σa = (σ[x][i, j] + σ[x-ej][i, j] + σ[x+ei][i, j] + σ[x+ei-ej][i, j]) / 4
-                σb = (σ[x][i, j] + σ[x+ei+ej][i, j] + σ[x+ei][i, j] + σ[x+ej][i, j]) / 4
-            end
-            div -= (σb - σa) / dx(f.grid)
-        end
-        f[x, i] = div
+@inline function tensordivergence_collocated(
+    σ,
+    ii::Direction{i},
+    jj::Direction{j},
+    I,
+) where {i,j}
+    ei, ej = e(ii), e(jj)
+    if i == j
+        σa = σ[I][i, j]
+        σb = σ[I+ei][i, j]
+    else
+        σa = (σ[I][i, j] + σ[I-ej][i, j] + σ[I+ei][i, j] + σ[I+ei-ej][i, j]) / 4
+        σb = (σ[I][i, j] + σ[I+ei+ej][i, j] + σ[I+ei][i, j] + σ[I+ej][i, j]) / 4
     end
-end
-
-"Divergence first, then interpolate"
-@kernel function tensordivergence_collocated_2!(f, σ)
-    x = @index(Global, Cartesian)
-    @unroll for i = 1:3
-        div = f[x, i] # add closure to existing force
-        @unroll for j = 1:3
-            ei, ej = e(i), e(j)
-            if i == j
-                div -= (σ[x+ej][i, j] - σ[x][i, j]) / dx(f.grid)
-            else
-                div -=
-                    (
-                        (σ[x][i, j] - σ[x-ej][i, j]) / dx(f.grid) +
-                        (σ[x+ej][i, j] - σ[x][i, j]) / dx(f.grid) +
-                        (σ[x+ei][i, j] - σ[x+ei-ej][i, j]) / dx(f.grid) +
-                        (σ[x+ei+ej][i, j] - σ[x+ei][i, j]) / dx(f.grid)
-                    ) / 4
-            end
-        end
-        f[x, i] = div
-    end
+    -(σb - σa) / dx(σ.grid)
 end
 
 function symmetrize!(σsymm, σ)

@@ -1,29 +1,60 @@
 # Weights for linear combination of finite difference and interpolation stencils
 @inline w(::Grid{1}) = (1,)
 @inline w(::Grid{2}) = 9 // 8, -1 // 8
+
 @inline w(::Grid{3}) = 150 // 128, -25 // 128, 3 // 128
 @inline w(::Grid{4}) = 1225 // 1024, -245 // 1024, 49 // 1024, -5 // 1024
 @inline w(::Grid{5}) =
     19845 // 16384, -2205 // 8192, 567 // 8192, -405 // 32768, 35 // 32768
 
-"Compute finite difference δ_i u(x) of the order given by grid."
-@inline δ(u::ScalarField, i, x) = sum(ntuple(n -> w(u.grid)[n] * δ(n, u, i, x), u.grid.ho))
-
-"Compute second order finite difference ``\\delta^{(2n+1) h}_i u(x)`` of width ``(2 n + 1) h``."
-@inline δ(n::Int, u::ScalarField, i, x) = δ(n, u.position[i], u, i, x)
-@inline δ(n::Int, ::Stag, u::ScalarField, i, x) =
-    (u[x+(n-1)*e(i)] - u[x-n*e(i)]) / (2n - 1) / dx(u.grid)
-@inline δ(n::Int, ::Coll, u::ScalarField, i, x) =
-    (u[x+n*e(i)] - u[x-(n-1)*e(i)]) / (2n - 1) / dx(u.grid)
+# "Compute finite difference δ_i u(x) of the order given by grid."
+# "Compute second order finite difference ``\\delta^{(2n+1) h}_i u(x)`` of width ``(2 n + 1) h``."
+@inline δ(u, i, x) = δ(u.grid, u, i, x)
+@inline δ(n::Int, u, i, x) = δ(n, u.position[i], u, i, x)
+@inline δ(n::Int, ::Stag, u, i, x) = (u[x+(n-1)*e(i)] - u[x-n*e(i)]) / (2n - 1) / dx(u.grid)
+@inline δ(n::Int, ::Coll, u, i, x) = (u[x+n*e(i)] - u[x-(n-1)*e(i)]) / (2n - 1) / dx(u.grid)
+# sum(ntuple(n -> w(u.grid)[n] * δ(n, u, i, x), u.grid.ho))
+@inline δ(::Grid{1}, u, i, x) = δ(1, u, i, x)
+@inline δ(::Grid{2}, u, i, x) = w(u.grid)[1] * δ(1, u, i, x) + w(u.grid)[2] * δ(2, u, i, x)
+@inline δ(::Grid{3}, u, i, x) =
+    w(u.grid)[1] * δ(1, u, i, x) +
+    w(u.grid)[2] * δ(2, u, i, x) +
+    w(u.grid)[3] * δ(3, u, i, x)
+@inline δ(::Grid{4}, u, i, x) =
+    w(u.grid)[1] * δ(1, u, i, x) +
+    w(u.grid)[2] * δ(2, u, i, x) +
+    w(u.grid)[3] * δ(3, u, i, x) +
+    w(u.grid)[4] * δ(4, u, i, x)
+@inline δ(::Grid{5}, u, i, x) =
+    w(u.grid)[1] * δ(1, u, i, x) +
+    w(u.grid)[2] * δ(2, u, i, x) +
+    w(u.grid)[3] * δ(3, u, i, x) +
+    w(u.grid)[4] * δ(4, u, i, x) +
+    w(u.grid)[5] * δ(5, u, i, x)
 
 # Interpolate u[i] in direction j. Land in canonical position at x.
-@inline interpolate(n::Int, u::ScalarField, i, x) = interpolate(n, u.position[i], u, i, x)
-@inline interpolate(n::Int, ::Stag, u::ScalarField, i, x) =
-    (u[x-n*e(i)] + u[x+(n-1)*e(i)]) / 2
-@inline interpolate(n::Int, ::Coll, u::ScalarField, i, x) =
-    (u[x-(n-1)*e(i)] + u[x+n*e(i)]) / 2
-@inline interpolate(u::ScalarField, i, x) =
-    sum(ntuple(n -> w(u.grid)[n] * interpolate(n, u, i, x), u.grid.ho))
+@inline interpolate(u, i, x) = interpolate(u.grid, u, i, x)
+@inline interpolate(n::Int, u, i, x) = interpolate(n, u.position[i], u, i, x)
+@inline interpolate(n::Int, ::Stag, u, i, x) = (u[x-n*e(i)] + u[x+(n-1)*e(i)]) / 2
+@inline interpolate(n::Int, ::Coll, u, i, x) = (u[x-(n-1)*e(i)] + u[x+n*e(i)]) / 2
+@inline interpolate(::Grid{1}, u, i, x) = interpolate(1, u, i, x)
+@inline interpolate(g::Grid{2}, u, i, x) =
+    w(g)[1] * interpolate(1, u, i, x) + w(g)[2] * interpolate(2, u, i, x)
+@inline interpolate(g::Grid{3}, u, i, x) =
+    w(g)[1] * interpolate(1, u, i, x) +
+    w(g)[2] * interpolate(2, u, i, x) +
+    w(g)[3] * interpolate(3, u, i, x)
+@inline interpolate(g::Grid{4}, u, i, x) =
+    w(g)[1] * interpolate(1, u, i, x) +
+    w(g)[2] * interpolate(2, u, i, x) +
+    w(g)[3] * interpolate(3, u, i, x) +
+    w(g)[4] * interpolate(4, u, i, x)
+@inline interpolate(g::Grid{5}, u, i, x) =
+    w(g)[1] * interpolate(1, u, i, x) +
+    w(g)[2] * interpolate(2, u, i, x) +
+    w(g)[3] * interpolate(3, u, i, x) +
+    w(g)[4] * interpolate(4, u, i, x) +
+    w(g)[5] * interpolate(5, u, i, x)
 
 """
 Compute divergence of vector field `u`.
@@ -38,7 +69,7 @@ divergence!
 end
 
 "Get convection-diffusion stress tensor component `i,j`."
-@inline function stress(u, x, i, j, visc)
+function stress(u, visc, i, j, x)
     # Non-linear stress
     ui_xj = interpolate(u[i], j, x)
     uj_xi = interpolate(u[j], i, x)
@@ -47,82 +78,106 @@ end
     # Strain-rate
     δj_ui = δ(u[i], j, x)
     δi_uj = δ(u[j], i, x)
-    sij = (δj_ui + δi_uj) / 2
+    sij = δj_ui + δi_uj
 
     # Resulting stress
-    ui_uj - 2 * visc * sij
+    ui_uj - visc * sij
 end
+
+stresstensor(u, visc) = LazyTensorField(u.grid, stress, u, visc)
 
 @kernel function stresstensor!(r, u, visc)
     I = @index(Global, Cartesian)
     x, y, z = X(), Y(), Z()
-    r[x, x][I] = stress(u, I, x, x, visc)
-    r[y, y][I] = stress(u, I, y, y, visc)
-    r[z, z][I] = stress(u, I, z, z, visc)
-    r[x, y][I] = r[y, x][I] = stress(u, I, x, y, visc)
-    r[x, z][I] = r[z, x][I] = stress(u, I, x, z, visc)
-    r[y, z][I] = r[z, y][I] = stress(u, I, y, z, visc)
+    r[x, x][I] = stress(u, visc, x, x, I)
+    r[y, y][I] = stress(u, visc, y, y, I)
+    r[z, z][I] = stress(u, visc, z, z, I)
+    r[x, y][I] = r[y, x][I] = stress(u, visc, x, y, I)
+    r[x, z][I] = r[z, x][I] = stress(u, visc, x, z, I)
+    r[y, z][I] = r[z, y][I] = stress(u, visc, y, z, I)
 end
 
 @kernel function stresstensor_symm!(r, u, visc)
     I = @index(Global, Cartesian)
     x, y, z = X(), Y(), Z()
-    r[I, 1] = stress(u, I, x, x, visc)
-    r[I, 2] = stress(u, I, y, y, visc)
-    r[I, 3] = stress(u, I, z, z, visc)
-    r[I, 4] = stress(u, I, x, y, visc)
-    r[I, 5] = stress(u, I, x, z, visc)
-    r[I, 6] = stress(u, I, y, z, visc)
+    r[I, 1] = stress(u, visc, x, x, I)
+    r[I, 2] = stress(u, visc, y, y, I)
+    r[I, 3] = stress(u, visc, z, z, I)
+    r[I, 4] = stress(u, visc, x, y, I)
+    r[I, 5] = stress(u, visc, x, z, I)
+    r[I, 6] = stress(u, visc, y, z, I)
 end
 
 "Approximate the convective force ``\\partial_j (u_i u_j)``."
-@inline function conv(u, x, i, j)
+function conv(u, i, j, x)
     ei, ej = e(i), e(j)
+    wg = w(u.grid)
+    c = zero(eltype(u.data))
+    @unroll for n = 1:getval(u.grid.ho)
+        # ui interpolated in direction xj with grid size nh (n = 1, 3, 5, 7, 9)
+        ui_nxj_a = interpolate(n, u[i], j, x - (n - 1 + (i != j)) * ej)
+        ui_nxj_b = interpolate(n, u[i], j, x + (n - 1 + (i == j)) * ej)
 
-    # ui interpolated in direction xj with grid size nh (n = 1, 3, 5, 7, 9)
-    ui_nxj_a = ntuple(n -> interpolate(n, u[i], j, x - (n - 1 + (i != j)) * ej), u.grid.ho)
-    ui_nxj_b = ntuple(n -> interpolate(n, u[i], j, x + (n - 1 + (i == j)) * ej), u.grid.ho)
+        # uj interpolated in direction xi with order
+        uj_xi_na = interpolate(u[j], i, x - (n - 1 + (i != j)) * ej)
+        uj_xi_nb = interpolate(u[j], i, x + (n - 1 + (i == j)) * ej)
 
-    # uj interpolated in direction xi with order
-    uj_xi_na = ntuple(n -> interpolate(u[j], i, x - (n - 1 + (i != j)) * ej), u.grid.ho)
-    uj_xi_nb = ntuple(n -> interpolate(u[j], i, x + (n - 1 + (i == j)) * ej), u.grid.ho)
+        # Tensor product -- see  Morinishi 1998 eq. (112)
+        ui_uj_na = ui_nxj_a * uj_xi_na
+        ui_uj_nb = ui_nxj_b * uj_xi_nb
 
-    # Tensor product -- see  Morinishi 1998 eq. (112)
-    ui_uj_na = ntuple(n -> ui_nxj_a[n] * uj_xi_na[n], u.grid.ho)
-    ui_uj_nb = ntuple(n -> ui_nxj_b[n] * uj_xi_nb[n], u.grid.ho)
-
-    # Divergence of tensor: Lands at canonical position of ui in volume x
-    # coefficient computed in script
-    sum(ntuple(n -> w(u.grid)[n] * (ui_uj_nb[n] - ui_uj_na[n]) / (2n - 1), u.grid.ho)) /
-    dx(u.grid)
+        # Divergence of tensor: Lands at canonical position of ui in volume x
+        # coefficient computed in script
+        c += wg[n] * (ui_uj_nb - ui_uj_na) / (2n - 1) / dx(u.grid)
+    end
+    c
 end
 
 "Laplacian."
-@inline function lap(u, x, i, j)
+function lap(u, i, j, x)
     g = u.grid
     o = order(g)
-    stencil = laplace_stencil(g) .|> eltype(u)
-    diff = zero(eltype(u))
+    stencil = map(eltype(u.data), laplace_stencil(g))
+    diff = zero(eltype(u.data))
     @unroll for k = 1:(2o-1)
         diff += stencil[k] * u[i][x+(k-o)*e(j)]
     end
     diff
 end
 
-@inline diffusion(u, x, i, j, visc) = visc * lap(u, x, i, j)
-
-@inline convdiff(u, x, i, j, visc) = -conv(u, x, i, j) + visc * lap(u, x, i, j)
+@inline diffusion(u, visc, i, j, x) = visc * lap(u, i, j, x)
+@inline convdiff(u, visc, i, j, x) = -conv(u, i, j, x) + visc * lap(u, i, j, x)
 
 """
-Compute ``v_i(I) = \\sum_j f(u, I, i, j)``.
+Compute ``v_i(I) = \\sum_j f(args..., i, j, I)``.
 """
-@kernel function tensorapply!(f, v, u, a...)
+@kernel function tensorapply!(f, v, args...)
     I = @index(Global, Cartesian)
     x, y, z = X(), Y(), Z()
-    v[x][I] = f(u, I, x, x, a...) + f(u, I, x, y, a...) + f(u, I, x, z, a...)
-    v[y][I] = f(u, I, y, x, a...) + f(u, I, y, y, a...) + f(u, I, y, z, a...)
-    v[z][I] = f(u, I, z, x, a...) + f(u, I, z, y, a...) + f(u, I, z, z, a...)
+    v[x][I] = f(args..., x, x, I) + f(args..., x, y, I) + f(args..., x, z, I)
+    v[y][I] = f(args..., y, x, I) + f(args..., y, y, I) + f(args..., y, z, I)
+    v[z][I] = f(args..., z, x, I) + f(args..., z, y, I) + f(args..., z, z, I)
 end
+
+"""
+Compute ``v_i(I) = v_i(I) + \\sum_j f(args..., i, j, I)``.
+"""
+@kernel function tensorapply_add!(f, v, args...)
+    I = @index(Global, Cartesian)
+    x, y, z = X(), Y(), Z()
+    v[x][I] += f(args..., x, x, I) + f(args..., x, y, I) + f(args..., x, z, I)
+    v[y][I] += f(args..., y, x, I) + f(args..., y, y, I) + f(args..., y, z, I)
+    v[z][I] += f(args..., z, x, I) + f(args..., z, y, I) + f(args..., z, z, I)
+end
+
+@kernel function materialize_kernel!(v, u)
+    I = @index(Global, Cartesian)
+    v[I] = u[I]
+end
+
+materialize!(v::ScalarField, u::LazyScalarField) = apply!(materialize_kernel!, v.grid, v, u)
+# materialize!(v::VectorField, u::LazyVectorField)
+# materialize!(v::TensorField, u::LazyTensorField)
 
 laplace_stencil(g::Grid{1}) = (1, -2, 1) ./ dx(g)^2
 laplace_stencil(g::Grid{2}) = (1, -54, 783, -1460, 783, -54, 1) .// 576 ./ dx(g)^2

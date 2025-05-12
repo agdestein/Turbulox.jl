@@ -1,19 +1,15 @@
-@kernel function clark_tensor!(G, Δ)
-    x = @index(Global, Cartesian)
-    g = G[x]
-    G[x] = Δ^2 / 12 * g * g'
+@inline function clark_tensor(Δ, u, I)
+    G = ∇_collocated(u, I)
+    Δ^2 / 12 * G * G'
 end
 
 """
 Clark's gradient model [clarkEvaluationSubgridscaleModels1979](@cite).
 """
-function clark_model(grid, Δ)
-    τ = collocated_tensorfield(grid)
-    function closure!(force, u)
-        apply!(velocitygradient_coll!, grid, τ, u)
-        apply!(clark_tensor!, grid, τ, Δ)
-        apply!(tensordivergence_collocated!, grid, force, τ)
-    end
+function clark_model!(force, Δ, u)
+    (; grid) = force
+    τ = LazyScalarField(grid, clark_tensor, Δ, u)
+    apply!(tensorapply_add!, grid, tensordivergence_collocated, force, τ)
 end
 
 """
@@ -21,27 +17,20 @@ Divergence of `-2 * visc * S`.
 Interpolate `visc` to staggered points first.
 Subtract result from existing force field `f`.
 """
-@kernel function eddyviscosity_closure!(f, visc, ∇u)
-    x = @index(Global, Cartesian)
-    @unroll for i = 1:3
-        div = f[x, i] # Add closure to existing force
-        @unroll for j = 1:3
-            ei, ej = e(i), e(j)
-            if i == j
-                nu_a = visc[x]
-                nu_b = visc[x+ei]
-                s_a = (∇u[x, i, j] + ∇u[x, j, i]) / 2
-                s_b = (∇u[x+ei, i, j] + ∇u[x+ei, j, i]) / 2
-            else
-                nu_a = (visc[x] + visc[x-ej] + visc[x+ei] + visc[x+ei-ej]) / 4
-                nu_b = (visc[x] + visc[x+ei+ej] + visc[x+ei] + visc[x+ej]) / 4
-                s_a = (∇u[x-ej, i, j] + ∇u[x-ej, j, i]) / 2
-                s_b = (∇u[x, i, j] + ∇u[x, j, i]) / 2
-            end
-            div += 2 * (s_b * nu_b - s_a * nu_a) / dx(f.g)
-        end
-        f[x, i] = div
+@inline function eddyviscosity_closure(visc, ∇u, i, j, x)
+    ei, ej = e(i), e(j)
+    if i == j
+        nu_a = visc[x]
+        nu_b = visc[x+ei]
+        s_a = (∇u[i, j][x] + ∇u[j, i][x]) / 2
+        s_b = (∇u[i, j][x+ei] + ∇u[j, i][x+ei]) / 2
+    else
+        nu_a = (visc[x] + visc[x-ej] + visc[x+ei] + visc[x+ei-ej]) / 4
+        nu_b = (visc[x] + visc[x+ei+ej] + visc[x+ei] + visc[x+ej]) / 4
+        s_a = (∇u[i, j][x-ej] + ∇u[j, i][x-ej]) / 2
+        s_b = (∇u[i, j][x] + ∇u[j, i][x]) / 2
     end
+    2 * (s_b * nu_b - s_a * nu_a) / dx(visc.grid)
 end
 
 @kernel function eddyviscosity_tensor!(τ, visc, ∇u)
@@ -52,15 +41,12 @@ end
 end
 
 "Eddy viscosity closure model."
-function eddyviscosity_model(viscosity!, grid, C, Δ)
-    ∇u = TensorField(grid)
-    visc = ScalarField(grid)
-    function closure!(force, u)
-        apply!(velocitygradient!, grid, ∇u, u)
-        apply!(viscosity!, grid, visc, ∇u, C, Δ)
-        apply!(eddyviscosity_closure!, grid, force, visc, ∇u)
-        force
-    end
+function eddyviscosity_model!(viscosity!, force, visc, ∇u, u, C, Δ)
+    (; grid) = force
+    apply!(velocitygradient!, grid, ∇u, u)
+    apply!(viscosity!, grid, visc, ∇u, C, Δ)
+    apply!(tensorapply_add!, grid, eddyviscosity_closure, force, visc, ∇u)
+    force
 end
 
 function strainnorm(G)

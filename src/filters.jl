@@ -98,7 +98,7 @@ fineline(::Coll, comp) = 1:comp
 finepoint(::Stag, comp) = comp:comp
 finepoint(::Coll, comp) = (a = div(comp, 2); (a+1):(a+1))
 
-function volumefilter!(uH::ScalarField, uh::ScalarField, comp)
+function volumefilter!(uH::ScalarField, uh, comp)
     (; grid, position) = uH
     (; n, backend, workgroupsize) = grid
     @kernel function Φ!(uH, uh, volume)
@@ -115,17 +115,17 @@ function volumefilter!(uH::ScalarField, uh::ScalarField, comp)
     Φ!(backend, workgroupsize)(uH, uh, volume; ndrange)
     uH
 end
-volumefilter!(uH::VectorField, uh::VectorField, comp) =
+volumefilter!(uH::VectorField, uh, comp) =
     for i in directions()
         volumefilter!(uH[i], uh[i], comp)
     end
-volumefilter!(uH::TensorField, uh::TensorField, comp) =
+volumefilter!(uH::TensorField, uh, comp) =
     for j in directions(), i in directions()
         volumefilter!(uH[i, j], uh[i, j], comp)
     end
 
 "Filter without reducing the grid size."
-function volumefilter_explicit!(uH::ScalarField, uh::ScalarField, comp)
+function volumefilter_explicit!(uH::ScalarField, uh, comp)
     (; grid, position) = uH
     (; n, backend, workgroupsize) = grid
     @kernel function Φ!(uH, uh, volume)
@@ -142,16 +142,16 @@ function volumefilter_explicit!(uH::ScalarField, uh::ScalarField, comp)
     Φ!(backend, workgroupsize)(uH, uh, volume; ndrange)
     uH
 end
-volumefilter_explicit!(uH::VectorField, uh::VectorField, comp) =
+volumefilter_explicit!(uH::VectorField, uh, comp) =
     for i in directions()
         volumefilter_explicit!(uH[i], uh[i], comp)
     end
-volumefilter_explicit!(uH::TensorField, uh::TensorField, comp) =
+volumefilter_explicit!(uH::TensorField, uh, comp) =
     for j in directions(), i in directions()
         volumefilter_explicit!(uH[i, j], uh[i, j], comp)
     end
 
-function surfacefilter!(uH::ScalarField, uh::ScalarField, comp, i)
+function surfacefilter!(uH::ScalarField, uh, comp, i)
     (; grid, position) = uH
     (; n, backend, workgroupsize) = grid
     @kernel function Φ!(uH, uh, face)
@@ -173,11 +173,11 @@ function surfacefilter!(uH::ScalarField, uh::ScalarField, comp, i)
     Φ!(backend, workgroupsize)(uH, uh, face; ndrange)
     uH
 end
-surfacefilter!(uH::VectorField, uh::VectorField, comp) =
+surfacefilter!(uH::VectorField, uh, comp) =
     for i in directions()
         surfacefilter!(uH[i], uh[i], comp, i)
     end
-surfacefilter!(uH::TensorField, uh::TensorField, comp, filter_i) =
+surfacefilter!(uH::TensorField, uh, comp, filter_i) =
     for j in directions(), i in directions()
         k = filter_i ? i : j
         surfacefilter!(uH[i, j], uh[i, j], comp, k)

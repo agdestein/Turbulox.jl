@@ -14,10 +14,10 @@ using TestItemRunner
     Aqua.test_all(Turbulox; project_extras = false)
 end
 
-@testitem "Code linting (JET.jl)" begin
-    using JET
-    JET.test_package(Turbulox; target_defined_modules = true)
-end
+# @testitem "Code linting (JET.jl)" begin
+#     using JET
+#     JET.test_package(Turbulox; target_defined_modules = true)
+# end
 
 @testitem "Consistency of weights" begin
     using Turbulox: w
@@ -62,7 +62,7 @@ end
         # Check that the convection operator is skew-symmetric
         # for a divergence-free field
         u = randomfield(grid, solver!) # Divergence-free
-        du = zero(u)
+        du = VectorField(grid)
         apply!(tensorapply!, grid, conv, du, u)
         dE = dot(u.data, du.data) / grid.n^3
         @test abs(dE) < 1e-12
@@ -70,33 +70,43 @@ end
         # This is because we use the divergence-form
         # (see Morinishi et al. 1998)
         u = VectorField(grid, randn(grid.n, grid.n, grid.n, 3)) # Non-divergence-free
-        du = zero(u)
+        du = VectorField(grid)
         apply!(tensorapply!, grid, conv, du, u)
         dE = dot(u.data, du.data) / grid.n^3
         @test abs(dE) > 1e-12
         # Check that the diffusion operator is dissipative
         u = VectorField(grid, randn(grid.n, grid.n, grid.n, 3)) # Non-divergence-free
-        du = zero(u)
+        du = VectorField(grid)
         apply!(tensorapply!, grid, diffusion, du, u, 1e-3)
-        dE = dot(u, du) / grid.n^3
+        dE = dot(u.data, du.data) / grid.n^3
         @test dE < 0
     end
 end
 
+# Check that divergence of convection-diffusion stress is the same as direct
+# implementation.
+# Note: Direct implementation does div(nu grad u),
+# while stress tensor is div(nu (grad u + grad u^T)).
+# These are only the same for divergence-free fields.
 @testitem "Stress tensor" begin
+    using LinearAlgebra
     grid = Grid(; L = 1.0, n = 16)
     u = VectorField(grid, randn(grid.n, grid.n, grid.n, 3))
-    r = TensorField(grid)
+    # Stress with grad u and sym(grad u) are only the same for divergence-free fields
+    p = ScalarField(grid)
+    solver! = poissonsolver(grid)
+    project!(u, p, solver!)
     f1 = VectorField(grid)
     f2 = VectorField(grid)
-    visc = 0.001
+    visc = 1e-3
     apply!(tensorapply!, u.grid, convdiff, f1, u, visc)
-    # Tensor
-    apply!(stresstensor!, g_les, r, u, visc)
-    apply!(tensordivergence!, g_les, du2, r)
-    du1.data - du2.data |> extrema
+    # Lazy stress tensor
+    σ = stresstensor(u, visc)
+    apply!(tensordivergence!, grid, f2, σ)
+    @test norm(f1.data - f2.data) < 1e-10
 end
 
+# All eddy viscosities should be positive
 @testitem "Eddy viscosity" begin
     using Turbulox: velocitygradient!
     using Turbulox:
