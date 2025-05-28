@@ -1,7 +1,6 @@
 # Weights for linear combination of finite difference and interpolation stencils
 @inline w(::Grid{1}) = (1,)
 @inline w(::Grid{2}) = 9 // 8, -1 // 8
-
 @inline w(::Grid{3}) = 150 // 128, -25 // 128, 3 // 128
 @inline w(::Grid{4}) = 1225 // 1024, -245 // 1024, 49 // 1024, -5 // 1024
 @inline w(::Grid{5}) =
@@ -273,27 +272,31 @@ function poissonsolver(grid)
     p = KernelAbstractions.allocate(backend, T, n, n, n)
     plan = plan_rfft(p)
 
-    function solver!(p)
-        # Fourier transform of right hand side
-        mul!(phat, plan, p.data)
+    (; plan, phat, ahat)
+end
 
-        # Solve for coefficients in Fourier space
-        ax = reshape(ahat[1], :)
-        ay = reshape(ahat[2], 1, :)
-        az = reshape(ahat[3], 1, 1, :)
-        @. phat = -phat / (ax + ay + az)
+function poissonsolve!(p, cache)
+    (; plan, phat, ahat) = cache
 
-        # Pressure is determined up to constant. We set this to 0 (instead of
-        # phat[1] / 0 = Inf)
-        # Note use of singleton range 1:1 instead of scalar index 1
-        # (otherwise CUDA gets annoyed)
-        phat[1:1] .= 0
+    # Fourier transform of right hand side
+    mul!(phat, plan, p.data)
 
-        # Inverse Fourier transform
-        ldiv!(p.data, plan, phat)
+    # Solve for coefficients in Fourier space
+    ax = reshape(ahat[1], :)
+    ay = reshape(ahat[2], 1, :)
+    az = reshape(ahat[3], 1, 1, :)
+    @. phat = -phat / (ax + ay + az)
 
-        p
-    end
+    # Pressure is determined up to constant. We set this to 0 (instead of
+    # phat[1] / 0 = Inf)
+    # Note use of singleton range 1:1 instead of scalar index 1
+    # (otherwise CUDA gets annoyed)
+    phat[1:1] .= 0
+
+    # Inverse Fourier transform
+    ldiv!(p.data, plan, phat)
+
+    p
 end
 
 "Subtract pressure gradient."
@@ -308,12 +311,12 @@ pressuregradient!
 end
 
 "Project velocity field onto divergence-free space."
-function project!(u, p, poissonsolve!)
+function project!(u, p, cache)
     # Divergence of tentative velocity field
     apply!(divergence!, u.grid, p, u)
 
     # Solve the Poisson equation
-    poissonsolve!(p)
+    poissonsolve!(p, cache)
 
     # Apply pressure correction term
     apply!(pressuregradient!, u.grid, u, p)

@@ -8,7 +8,7 @@ function default_right_hand_side!(du, u, visc)
 end
 
 "Perform time step using Wray's third-order scheme."
-function timestep!(f!, u, cache, Δt, solver!)
+function timestep!(f!, u, cache, Δt, poisson)
     (; ustart, du, p) = cache
     T = eltype(u)
 
@@ -39,7 +39,7 @@ function timestep!(f!, u, cache, Δt, solver!)
         # Compute u = project(ustart + Δt * a[i] * du)
         i == 1 || copyto!(u.data, ustart.data) # Skip first iter
         axpy!(a[i] * Δt, du.data, u.data)
-        project!(u, p, solver!)
+        project!(u, p, poisson)
 
         # Compute ustart = ustart + Δt * b[i] * du
         i == nstage || axpy!(b[i] * Δt, du.data, ustart.data) # Skip last iter

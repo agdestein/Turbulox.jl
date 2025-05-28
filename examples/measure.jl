@@ -12,7 +12,7 @@ T = Float64
 # backend = CPU()
 backend = CUDABackend()
 grid = Turbulox.Grid(; ho = Val(1), n = 256, L = 1.0, backend);
-solver! = Turbulox.poissonsolver(grid);
+poisson = Turbulox.poissonsolver(grid);
 cache = (;
     ustart = Turbulox.VectorField(grid),
     du = Turbulox.VectorField(grid),
@@ -38,15 +38,15 @@ let
     ustart.data[:, :, :, 1] .= Ux.(x, yp, zp);
     ustart.data[:, :, :, 2] .= Uy.(xp, y, zp);
     ustart.data[:, :, :, 3] .= Uz.(xp, yp, z);
-    Turbulox.project!(ustart, cache.p, solver!);
+    Turbulox.project!(ustart, cache.p, poisson);
 end
 
 @benchmark let
     u = ustart
     visc = eltype(u)(5e-5)
-    # apply!(tensorapply!, u.grid, convdiff, cache.du, u, visc)
+    apply!(tensorapply!, u.grid, convdiff, cache.du, u, visc)
     # apply!(tensorapply!, u.grid, diffusion, cache.du, u, visc)
-    apply!(tensorapply!, u.grid, conv, cache.du, u)
+    # apply!(tensorapply!, u.grid, conv, cache.du, u)
 end
 
 @benchmark let
@@ -56,7 +56,6 @@ end
     fill!(cache.du.data, 0)
     apply!(tensordivergence!, u.grid, cache.du, σ)
 end
-
 
 function rhs!(du, u)
     visc = eltype(du)(5e-5)

@@ -86,7 +86,7 @@ function create_spectrum(; grid, kp, rng = Random.default_rng())
     stack(uhat)
 end
 
-function randomfield(grid, solver!; A = 1, kp = 10, rng = Random.default_rng())
+function randomfield(grid, poisson; A = 1, kp = 10, rng = Random.default_rng())
     # Create random velocity field
     uhat = create_spectrum(; grid, kp, rng)
     u = ifft(uhat, 1:3)
@@ -96,6 +96,6 @@ function randomfield(grid, solver!; A = 1, kp = 10, rng = Random.default_rng())
     # Make velocity field divergence free on staggered grid
     # (it is already divergence free on the "spectral grid")
     p = ScalarField(grid)
-    project!(u, p, solver!)
+    project!(u, p, poisson)
     u
 end

@@ -44,10 +44,10 @@ end
 @testitem "Pressure projection" begin
     for ho = 1:5
         grid = Grid(; ho = Val(ho), L = 1.0, n = 16)
-        solver! = poissonsolver(grid)
+        poisson = poissonsolver(grid)
         u = VectorField(grid, randn(grid.n, grid.n, grid.n, 3))
         p = ScalarField(grid)
-        project!(u, p, solver!)
+        project!(u, p, poisson)
         div = ScalarField(grid)
         apply!(divergence!, grid, div, u)
         @test maximum(abs, div) < 1e-12
@@ -94,8 +94,8 @@ end
     u = VectorField(grid, randn(grid.n, grid.n, grid.n, 3))
     # Stress with grad u and sym(grad u) are only the same for divergence-free fields
     p = ScalarField(grid)
-    solver! = poissonsolver(grid)
-    project!(u, p, solver!)
+    poisson = poissonsolver(grid)
+    project!(u, p, poisson)
     f1 = VectorField(grid)
     f2 = VectorField(grid)
     visc = 1e-3

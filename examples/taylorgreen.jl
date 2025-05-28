@@ -23,7 +23,7 @@ backend = KernelAbstractions.CPU()
 # backend = CUDABackend()
 
 grid = Turbulox.Grid(; ho = Val(1), n = 128, L = 1.0, backend);
-solver! = Turbulox.poissonsolver(grid);
+poisson = Turbulox.poissonsolver(grid);
 
 u = Turbulox.VectorField(grid);
 cache = (;
@@ -50,7 +50,7 @@ let
     u.data[:, :, :, 1] .= Ux.(x, yp, zp);
     u.data[:, :, :, 2] .= Uy.(xp, y, zp);
     u.data[:, :, :, 3] .= Uz.(xp, yp, z);
-    Turbulox.project!(u, cache.p, solver!);
+    Turbulox.project!(u, cache.p, poisson);
 end
 
 "Compute ``z``-component of vorticity in the plane ``z=z``."
