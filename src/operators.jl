@@ -348,7 +348,7 @@ function get_scale_numbers(u, visc)
     L = let
         K = div(n, 2)
         uhat = fft(u.data, 1:3)
-        uhat = uhat[ntuple(i -> 1:K, 3)..., :]
+        uhat = uhat[ntuple(i->1:K, 3)..., :]
         e = abs2.(uhat) ./ (2 * (n^3)^2)
         kx = reshape(0:(K-1), :)
         ky = reshape(0:(K-1), 1, :)

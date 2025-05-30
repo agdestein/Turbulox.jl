@@ -84,7 +84,7 @@ u = VectorField(grid)
     end
 end
 
- # 14.969949 seconds (6.48 M allocations: 320.616 MiB, 0.22% gc time, 8.21% compilation time)
- 
- # Tensor:
- # 16.906574 seconds (375.98 k allocations: 13.007 MiB, 0.10% compilation time: 100% of which was recompilation)
+# 14.969949 seconds (6.48 M allocations: 320.616 MiB, 0.22% gc time, 8.21% compilation time)
+
+# Tensor:
+# 16.906574 seconds (375.98 k allocations: 13.007 MiB, 0.10% compilation time: 100% of which was recompilation)

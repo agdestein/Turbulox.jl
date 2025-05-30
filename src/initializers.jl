@@ -141,7 +141,7 @@ function randomfield_simple(profile, grid, poisson; rng = Random.default_rng(), 
     @kernel function normalize!(uhat, profile, params, n)
         I = @index(Global, Cartesian)
         kx, ky, kz = I[1] - 1, I[2] - 1, I[3] - 1
-        ux, uy, uz = uhat[I, 1] , uhat[I, 2] , uhat[I, 3]
+        ux, uy, uz = uhat[I, 1], uhat[I, 2], uhat[I, 3]
         k2 = kx^2 + ky^2 + kz^2
         E0 = profile(k2, params)
         E = (abs2(ux) + abs2(uy) + abs2(uz)) / 2

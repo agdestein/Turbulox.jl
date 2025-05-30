@@ -34,13 +34,8 @@ function spectral_stuff(grid; npoint = 100)
     end
 
     u_i = KernelAbstractions.allocate(backend, T, N...)
-    uhat_i = KernelAbstractions.allocate(
-        backend,
-        Complex{T},
-        div(grid.n, 2) + 1,
-        grid.n,
-        grid.n,
-    )
+    uhat_i =
+        KernelAbstractions.allocate(backend, Complex{T}, div(grid.n, 2) + 1, grid.n, grid.n)
     ehat = KernelAbstractions.allocate(backend, T, K)
     plan = plan_rfft(u_i)
 
@@ -56,7 +51,7 @@ function spectrum(u; npoint = 100, stuff = spectral_stuff(grid; npoint))
     fill!(ehat, 0)
     for i = 1:3
         # mul!(uhat_i, plan, selectdim(u.data, 4, i))
-        mul!(uhat_i, plan, view(u.data, :, :, :, i))
+        mul!(uhat_i, plan, view(u.data,:,:,:,i))
         uhathalf = view(uhat_i, ntuple(j -> 1:K[j], 3)...)
         @. ehat += abs2(uhathalf) / 2 / (n^3)^2
     end

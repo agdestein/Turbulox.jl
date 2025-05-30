@@ -96,7 +96,6 @@ fig
 v = VectorField(grid, copy(u.data));
 # copyto!(u.data, v.data);
 
-
 Δ = T(1 / grid.n)
 viscosity!, C = smagorinsky_viscosity!, T(0.17)
 viscosity!, C = wale_viscosity!, T(0.569)
@@ -246,7 +245,7 @@ volume(
     # lowclip = :transparent,
 )
 
-Q[] = copyto!(Q[], view(q, :, 220, :))
+Q[] = copyto!(Q[], view(q,:,220,:))
 
 s = Turbulox.get_scale_numbers(u, grid, visc)
 

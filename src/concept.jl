@@ -163,7 +163,8 @@ Adapt.adapt_structure(to, u::VectorField) = VectorField(u.grid, adapt(to, u.data
 Adapt.adapt_structure(to, u::TensorField) = TensorField(u.grid, adapt(to, u.data))
 Adapt.adapt_structure(to, u::LazyScalarField) =
     LazyScalarField(u.position, u.grid, u.func, adapt(to, u.stuff)...)
-Adapt.adapt_structure(to, u::LazyVectorField) = LazyVectorField(u.grid, u.func, adapt(to, u.stuff)...)
+Adapt.adapt_structure(to, u::LazyVectorField) =
+    LazyVectorField(u.grid, u.func, adapt(to, u.stuff)...)
 Adapt.adapt_structure(to, u::LazyTensorField) =
     LazyTensorField(u.grid, u.func, adapt(to, u.stuff)...)
 
@@ -210,10 +211,11 @@ Base.getindex(u::LazyScalarField, I::Vararg{Int,3}) = u.func(u.stuff..., Cartesi
 # No modifying of lazy fields.
 
 @inline Base.getindex(u::VectorField, ii::Direction{i}) where {i} =
-    ScalarField(vectorposition(ii), u.grid, view(u.data, :, :, :, i))
+    ScalarField(vectorposition(ii), u.grid, view(u.data,:,:,:,i))
 @inline Base.getindex(u::TensorField, ii::Direction{i}, jj::Direction{j}) where {i,j} =
-    ScalarField(tensorposition(ii, jj), u.grid, view(u.data, :, :, :, i, j))
-@inline Base.getindex(u::LazyVectorField, i) = LazyScalarField(vectorposition(i), u.grid, u.stuff..., i)
+    ScalarField(tensorposition(ii, jj), u.grid, view(u.data,:,:,:,i,j))
+@inline Base.getindex(u::LazyVectorField, i) =
+    LazyScalarField(vectorposition(i), u.grid, u.stuff..., i)
 @inline Base.getindex(u::LazyTensorField, i, j) =
     LazyScalarField(tensorposition(i, j), u.grid, u.func, u.stuff..., i, j)
 
