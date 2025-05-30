@@ -16,28 +16,26 @@ function create_spectrum(; grid, kp, rng = Random.default_rng())
     d = 3
     τ = T(2π)
 
-    # Maximum wavenumber (remove ghost volumes)
-    K = ntuple(Returns(div(grid.n, 2)), 3)
+    # Maximum wavenumber
+    K = div(grid.n, 2)
 
     # Wavenumber vectors
-    kk = reshape(0:(K[1]-1), :), reshape(0:(K[2]-1), 1, :), reshape(0:(K[3]-1), 1, 1, :)
+    kx = reshape(0:(K-1), :)
+    ky = reshape(0:(K-1), 1, :)
+    kz = reshape(0:(K-1), 1, 1, :)
 
     # Wavevector magnitude
-    k = KernelAbstractions.zeros(backend, T, K)
-    for kk in kk
-        @. k += kk^2
-    end
-    k .= sqrt.(k)
+    k = KernelAbstractions.zeros(backend, T, K, K, K)
+    @. k = sqrt(kx^2 + ky^2 + kz^2)
 
     # Shared magnitude
     A = T(8τ / 3) / kp^5
 
     # Velocity magnitude
-    a = @. complex(1) * sqrt(A * k^4 * exp(-τ * (k / kp)^2))
-    a .*= grid.n^3
+    a = @. complex(1) * sqrt(A * k^4 * exp(-τ * (k / kp)^2)) * grid.n^3
 
     # Apply random phase shift
-    ξ = ntuple(i -> rand!(rng, KernelAbstractions.allocate(backend, T, K)), 3)
+    ξ = ntuple(i -> rand!(rng, KernelAbstractions.allocate(backend, T, K, K, K)), 3)
     for i = 1:3
         a = cat(a, reverse(a; dims = i); dims = i)
         ξ = ntuple(3) do j
@@ -49,10 +47,9 @@ function create_spectrum(; grid, kp, rng = Random.default_rng())
     ξ = sum(ξ)
     a = @. exp(im * τ * ξ) * a
 
-    KK = 2 .* K
-    kkkk =
-        reshape(0:(KK[1]-1), :), reshape(0:(KK[2]-1), 1, :), reshape(0:(KK[3]-1), 1, 1, :)
-    knorm = KernelAbstractions.zeros(backend, T, KK)
+    KK = 2 * K
+    kkkk = reshape(0:(KK-1), :), reshape(0:(KK-1), 1, :), reshape(0:(KK-1), 1, 1, :)
+    knorm = KernelAbstractions.zeros(backend, T, KK, KK, KK)
     for i = 1:3
         @. knorm += kkkk[i]^2
     end
@@ -97,5 +94,87 @@ function randomfield(grid, poisson; A = 1, kp = 10, rng = Random.default_rng())
     # (it is already divergence free on the "spectral grid")
     p = ScalarField(grid)
     project!(u, p, poisson)
+    u
+end
+
+energyprofile(k2, (; amplitude, kpeak)) =
+    amplitude * k2^2 / kpeak^5 * exp(-2 * k2 / kpeak^2)
+
+"""
+Make random velocity field with prescribed energy spectrum profile.
+
+Note: The profile takes the scalar squared wavenumber norm as input,
+define it as `profile(k2)`.
+"""
+function randomfield_simple(profile, grid, poisson; rng = Random.default_rng(), params)
+    # Create random field and make it divergence free
+    u = VectorField(grid)
+    randn!(rng, u.data)
+    p = ScalarField(grid)
+    project!(u, p, poisson)
+
+    # # Wavenumber vectors
+    # K = div(grid.n, 2) + 1
+    # N = grid.n
+    # kx = reshape(0:(K-1), :) # Half the modes since RFFT is used
+    # ky = reshape(0:(N-1), 1, :) # All modes
+    # kz = reshape(0:(N-1), 1, 1, :) # All modes
+    # kx = kx |> Array |> adapt(grid.backend)
+    # ky = ky |> Array |> adapt(grid.backend)
+    # kz = kz |> Array |> adapt(grid.backend)
+
+    # Plan transform
+    plan = plan_rfft(u.data, 1:3)
+
+    # Fourier coefficients of velocity field
+    uhat = plan * u.data
+    # ux = selectdim(uhat, 4, 1)
+    # uy = selectdim(uhat, 4, 2)
+    # uz = selectdim(uhat, 4, 3)
+
+    # # Adjust the amplitude to match energy profile
+    # @. uhat =
+    #     uhat *
+    #     sqrt(profile(kx^2 + ky^2 + kz^2, params) / (abs2(ux) + abs2(uy) + abs2(uz))) *
+    #     grid.n^3
+
+    @kernel function normalize!(uhat, profile, params, n)
+        I = @index(Global, Cartesian)
+        kx, ky, kz = I[1] - 1, I[2] - 1, I[3] - 1
+        ux, uy, uz = uhat[I, 1] , uhat[I, 2] , uhat[I, 3]
+        k2 = kx^2 + ky^2 + kz^2
+        E0 = profile(k2, params)
+        E = (abs2(ux) + abs2(uy) + abs2(uz)) / 2
+        uhat[I, 1] = uhat[I, 1] * sqrt(E0 / E) * n^3
+        uhat[I, 2] = uhat[I, 2] * sqrt(E0 / E) * n^3
+        uhat[I, 3] = uhat[I, 3] * sqrt(E0 / E) * n^3
+    end
+
+    ndrange = div(grid.n, 2) + 1, grid.n, grid.n
+    apply!(normalize!, grid, uhat, profile, params, grid.n; ndrange)
+
+    # Note: Ideally, we should maybe not do this for each k = (kx, ky, kz),
+    # but rather do it for each shell k = 0, 1, 2, 3, ...,
+    # such that the energy contained in the shell k is exactly the profile.
+
+    # Set constant mode to zero (broadcast since uhat may be a GPU array)
+    uhat[1:1] .= 0
+
+    # Inverse transform
+    ldiv!(u.data, plan, uhat)
+
+    # Normally, adjusting the amplitude of the 3D vector uhat(k)
+    # does not remove divergence freeness, since the divergence becomes
+    # i k dot uhat(k) in  Fourier space, which stays zero if uhat is scaled.
+    # But since our divergence is discrete, defined through staggered finite
+    # differences, this is no longer exactly the case. So we project again
+    # to correct for this (minor?) error.
+    project!(u, p, poisson)
+
+    # The velocity now has
+    # the correct spectrum,
+    # random phase shifts,
+    # random orientations, 
+    # and is also divergence free.
     u
 end

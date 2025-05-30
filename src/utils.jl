@@ -20,30 +20,31 @@ function spectral_stuff(grid; npoint = 100)
     inds = IntArray[]
 
     # Output query points (evenly log-spaced, but only integer wavenumbers)
-    κ = logrange(T(1), T(kmax), npoint)
-    κ = sort(unique(round.(Int, κ)))
-    npoint = length(κ)
+    kuse = logrange(T(1), T(kmax), npoint)
+    kuse = sort(unique(round.(Int, kuse)))
+    npoint = length(kuse)
 
     for i = 1:npoint
         tol = T(0.01)
-        jstart = findfirst(≥(κ[i] - tol), ksort)
-        jstop = findfirst(≥(κ[i] + 1 - tol), ksort)
+        jstart = findfirst(≥(kuse[i] - tol), ksort)
+        jstop = findfirst(≥(kuse[i] + 1 - tol), ksort)
         isnothing(jstop) && (jstop = length(ksort) + 1)
         jstop -= 1
         push!(inds, adapt(IntArray, isort[jstart:jstop]))
     end
 
-    u = KernelAbstractions.allocate(backend, T, N..., 3)
-    uhat = KernelAbstractions.allocate(
+    u_i = KernelAbstractions.allocate(backend, T, N...)
+    uhat_i = KernelAbstractions.allocate(
         backend,
         Complex{T},
-        ntuple(i -> i == 1 ? div(grid.n, 2) + 1 : grid.n, 3)...,
-        3,
+        div(grid.n, 2) + 1,
+        grid.n,
+        grid.n,
     )
-    ehat = KernelAbstractions.allocate(backend, T, K..., 3)
-    plan = plan_rfft(u, 1:3)
+    ehat = KernelAbstractions.allocate(backend, T, K)
+    plan = plan_rfft(u_i)
 
-    (; inds, κ, K, uhat, ehat, plan)
+    (; inds, k = kuse, K, uhat_i, ehat, plan)
 end
 
 function spectrum(u; npoint = 100, stuff = spectral_stuff(grid; npoint))
@@ -51,13 +52,14 @@ function spectrum(u; npoint = 100, stuff = spectral_stuff(grid; npoint))
     (; n) = grid
     T = eltype(u)
     N = n, n, n
-    (; inds, κ, K, uhat, ehat, plan) = stuff
-    mul!(uhat, plan, u.data)
+    (; inds, k, K, uhat_i, ehat, plan) = stuff
     fill!(ehat, 0)
     for i = 1:3
-        uhathalf = view(uhat, ntuple(j -> 1:K[j], 3)..., i)
+        # mul!(uhat_i, plan, selectdim(u.data, 4, i))
+        mul!(uhat_i, plan, view(u.data, :, :, :, i))
+        uhathalf = view(uhat_i, ntuple(j -> 1:K[j], 3)...)
         @. ehat += abs2(uhathalf) / 2 / (n^3)^2
     end
     s = map(i -> sum(view(ehat, i)), inds)
-    (; s, κ)
+    (; k, s)
 end

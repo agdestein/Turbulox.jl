@@ -46,32 +46,32 @@ end
     end
 end
 
-function δ_collocated(u, i, j, I)
+function δ_collocated(n::Int, u, i, j, I)
     ei, ej = e(i), e(j)
     if i == j
-        δ(u[i], j, I)
+        δ(n, u[i], j, I)
     else
         (
-            δ(u[i], j, I) +
-            δ(u[i], j, I - ej) +
-            δ(u[i], j, I - ei) +
-            δ(u[i], j, I - ei - ej)
+            δ(n, u[i], j, I) +
+            δ(n, u[i], j, I - ej) +
+            δ(n, u[i], j, I - ei) +
+            δ(n, u[i], j, I - ei - ej)
         ) / 4
     end
 end
 
-function ∇_collocated(u, I)
+function ∇_collocated(n::Int, u, I)
     x, y, z = X(), Y(), Z()
     SMatrix{3,3,eltype(u),9}(
-        δ_collocated(u, x, x, I),
-        δ_collocated(u, y, x, I),
-        δ_collocated(u, z, x, I),
-        δ_collocated(u, x, y, I),
-        δ_collocated(u, y, y, I),
-        δ_collocated(u, z, y, I),
-        δ_collocated(u, x, z, I),
-        δ_collocated(u, y, z, I),
-        δ_collocated(u, z, z, I),
+        δ_collocated(n, u, x, x, I),
+        δ_collocated(n, u, y, x, I),
+        δ_collocated(n, u, z, x, I),
+        δ_collocated(n, u, x, y, I),
+        δ_collocated(n, u, y, y, I),
+        δ_collocated(n, u, z, y, I),
+        δ_collocated(n, u, x, z, I),
+        δ_collocated(n, u, y, z, I),
+        δ_collocated(n, u, z, z, I),
     )
 end
 
@@ -150,7 +150,7 @@ end
             σ[i, j][x-ej] * strain(u, i, j, x - ej) +
             σ[i, j][x-ei-ej] * strain(u, i, j, x - ei - ej)
         ) / 4
-        # -(
+        # (
         #     σ[i, j][x] * δ(u[i], j, x) +
         #     σ[i, j][x-ei] * δ(u[i], j, x - ei) +
         #     σ[i, j][x-ej] * δ(u[i], j, x - ej) +
