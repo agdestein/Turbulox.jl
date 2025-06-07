@@ -1,14 +1,11 @@
 # Time stepping
 
 "Default right-hand side function (without projection)."
-function default_right_hand_side!(du, u, visc)
-    fill!(du.data, 0)
-    apply!(convectiondiffusion!, u.grid, du, u, visc)
-    du
-end
+right_hand_side!(du, u; viscosity) =
+    apply!(tensorapply!, u.grid, convdiff, du, u, viscosity)
 
 "Perform time step using Wray's third-order scheme."
-function timestep!(f!, u, cache, Δt, poisson)
+function timestep!(f!, u, cache, Δt, poisson; params...)
     (; ustart, du, p) = cache
     T = eltype(u)
 
@@ -34,7 +31,7 @@ function timestep!(f!, u, cache, Δt, poisson)
     copyto!(ustart.data, u.data)
 
     for i = 1:nstage
-        f!(du, u)
+        f!(du, u; params...)
 
         # Compute u = project(ustart + Δt * a[i] * du)
         i == 1 || copyto!(u.data, ustart.data) # Skip first iter

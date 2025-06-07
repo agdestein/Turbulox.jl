@@ -378,3 +378,12 @@ end
     uz = interpolate(u[z], z, I)
     ucoll[I] = SVector(ux, uy, uz)
 end
+
+@kernel function velocitynorm!(unorm, u)
+    I = @index(Global, Cartesian)
+    x, y, z = X(), Y(), Z()
+    ux = interpolate(u[x], x, I)
+    uy = interpolate(u[y], y, I)
+    uz = interpolate(u[z], z, I)
+    unorm[I] = sqrt(ux^2 + uy^2 + uz^2)
+end

@@ -113,31 +113,13 @@ function randomfield_simple(profile, grid, poisson; rng = Random.default_rng(), 
     p = ScalarField(grid)
     project!(u, p, poisson)
 
-    # # Wavenumber vectors
-    # K = div(grid.n, 2) + 1
-    # N = grid.n
-    # kx = reshape(0:(K-1), :) # Half the modes since RFFT is used
-    # ky = reshape(0:(N-1), 1, :) # All modes
-    # kz = reshape(0:(N-1), 1, 1, :) # All modes
-    # kx = kx |> Array |> adapt(grid.backend)
-    # ky = ky |> Array |> adapt(grid.backend)
-    # kz = kz |> Array |> adapt(grid.backend)
-
     # Plan transform
     plan = plan_rfft(u.data, 1:3)
 
     # Fourier coefficients of velocity field
     uhat = plan * u.data
-    # ux = selectdim(uhat, 4, 1)
-    # uy = selectdim(uhat, 4, 2)
-    # uz = selectdim(uhat, 4, 3)
 
-    # # Adjust the amplitude to match energy profile
-    # @. uhat =
-    #     uhat *
-    #     sqrt(profile(kx^2 + ky^2 + kz^2, params) / (abs2(ux) + abs2(uy) + abs2(uz))) *
-    #     grid.n^3
-
+    # Adjust the amplitude to match energy profile
     @kernel function normalize!(uhat, profile, params, n)
         I = @index(Global, Cartesian)
         kx, ky, kz = I[1] - 1, I[2] - 1, I[3] - 1
@@ -145,11 +127,10 @@ function randomfield_simple(profile, grid, poisson; rng = Random.default_rng(), 
         k2 = kx^2 + ky^2 + kz^2
         E0 = profile(k2, params)
         E = (abs2(ux) + abs2(uy) + abs2(uz)) / 2
-        uhat[I, 1] = uhat[I, 1] * sqrt(E0 / E) * n^3
-        uhat[I, 2] = uhat[I, 2] * sqrt(E0 / E) * n^3
-        uhat[I, 3] = uhat[I, 3] * sqrt(E0 / E) * n^3
+        uhat[I, 1] *= sqrt(E0 / E) * n^3
+        uhat[I, 2] *= sqrt(E0 / E) * n^3
+        uhat[I, 3] *= sqrt(E0 / E) * n^3
     end
-
     ndrange = div(grid.n, 2) + 1, grid.n, grid.n
     apply!(normalize!, grid, uhat, profile, params, grid.n; ndrange)
 

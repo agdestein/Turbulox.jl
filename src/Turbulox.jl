@@ -25,6 +25,8 @@ export ScalarField, VectorField, collocated_tensorfield, TensorField, randomfiel
 export LazyScalarField, LazyVectorField, LazyTensorField
 export materialize!
 export poissonsolver,
+    poissonsolve!,
+    pressuregradient!,
     project!,
     divergence!,
     convdiff,
@@ -33,12 +35,13 @@ export poissonsolver,
     diffusion,
     tensorapply!,
     stresstensor,
-    stresstensor!
+    stresstensor!,
+    stress
 export desymmetrize!,
     pol_tensor_stag!, tensorproduct_stag!, tensorproduct_coll!, tensordivergence!
 export symmetrize!
 export tophat, gaussian, applyfilter!
-export propose_timestep, timestep!
+export propose_timestep, timestep!, right_hand_side!
 export spectral_stuff, spectrum, get_scale_numbers
 export eddyviscosity_model!,
     clark_model!,

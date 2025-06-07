@@ -60,6 +60,8 @@ function δ_collocated(n::Int, u, i, j, I)
     end
 end
 
+∇_collocated(u, I) = ∇_collocated(1, u, I)
+
 function ∇_collocated(n::Int, u, I)
     x, y, z = X(), Y(), Z()
     SMatrix{3,3,eltype(u),9}(
@@ -139,23 +141,23 @@ end
     diss[x] = -dot(σ[x], S)
 end
 
-@inline function dissipation(σ, u, x, i, j)
+@inline function dissipation(σ, u, i, j, I)
     ei, ej = e(i), e(j)
     if i == j
-        σ[i, j][x] * δ(u[i], j, x)
+        σ[i, j][I] * δ(u[i], j, I)
     else
-        (
-            σ[i, j][x] * strain(u, i, j, x) +
-            σ[i, j][x-ei] * strain(u, i, j, x - ei) +
-            σ[i, j][x-ej] * strain(u, i, j, x - ej) +
-            σ[i, j][x-ei-ej] * strain(u, i, j, x - ei - ej)
-        ) / 4
         # (
-        #     σ[i, j][x] * δ(u[i], j, x) +
-        #     σ[i, j][x-ei] * δ(u[i], j, x - ei) +
-        #     σ[i, j][x-ej] * δ(u[i], j, x - ej) +
-        #     σ[i, j][x-ei-ej] * δ(u[i], j, x - ei - ej)
+        #     σ[i, j][I] * strain(u, i, j, I) +
+        #     σ[i, j][I-ei] * strain(u, i, j, I - ei) +
+        #     σ[i, j][I-ej] * strain(u, i, j, I - ej) +
+        #     σ[i, j][I-ei-ej] * strain(u, i, j, I - ei - ej)
         # ) / 4
+        (
+            σ[i, j][I] * δ(u[i], j, I) +
+            σ[i, j][I-ei] * δ(u[i], j, I - ei) +
+            σ[i, j][I-ej] * δ(u[i], j, I - ej) +
+            σ[i, j][I-ei-ej] * δ(u[i], j, I - ei - ej)
+        ) / 4
     end
 end
 
@@ -163,15 +165,15 @@ end
     I = @index(Global, Cartesian)
     x, y, z = X(), Y(), Z()
     diss[I] =
-        dissipation(σ, u, I, x, x) +
-        dissipation(σ, u, I, y, x) +
-        dissipation(σ, u, I, z, x) +
-        dissipation(σ, u, I, x, y) +
-        dissipation(σ, u, I, y, y) +
-        dissipation(σ, u, I, z, y) +
-        dissipation(σ, u, I, x, z) +
-        dissipation(σ, u, I, y, z) +
-        dissipation(σ, u, I, z, z)
+        dissipation(σ, u, x, x, I) +
+        dissipation(σ, u, y, x, I) +
+        dissipation(σ, u, z, x, I) +
+        dissipation(σ, u, x, y, I) +
+        dissipation(σ, u, y, y, I) +
+        dissipation(σ, u, z, y, I) +
+        dissipation(σ, u, x, z, I) +
+        dissipation(σ, u, y, z, I) +
+        dissipation(σ, u, z, z, I)
 end
 
 @inline function invariants(∇u)
