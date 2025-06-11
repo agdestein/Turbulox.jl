@@ -20,6 +20,7 @@ include("utils.jl")
 
 export Stag, Coll, X, Y, Z, Direction
 export Position, Center, FaceX, FaceY, FaceZ, EdgeX, EdgeY, EdgeZ, Corner
+export vectorposition, tensorposition
 export Grid, order, dx, get_axis, apply!
 export ScalarField, VectorField, collocated_tensorfield, TensorField, randomfield
 export LazyScalarField, LazyVectorField, LazyTensorField
@@ -36,11 +37,13 @@ export poissonsolver,
     tensorapply!,
     stresstensor,
     stresstensor!,
-    stress
+    stress,
+    δ
 export desymmetrize!,
     pol_tensor_stag!, tensorproduct_stag!, tensorproduct_coll!, tensordivergence!
 export symmetrize!
 export tophat, gaussian, applyfilter!
+export volumefilter!, surfacefilter!, linefilter!
 export propose_timestep, timestep!, right_hand_side!
 export spectral_stuff, spectrum, get_scale_numbers
 export eddyviscosity_model!,

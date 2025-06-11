@@ -45,6 +45,17 @@ const Z = Direction{3}
 
 @inline directions() = X(), Y(), Z()
 
+@inline orthogonal(::X) = Y(), Z()
+@inline orthogonal(::Y) = X(), Z()
+@inline orthogonal(::Z) = X(), Y()
+
+@inline orthogonal(::X, ::Y) = Z()
+@inline orthogonal(::Y, ::X) = Z()
+@inline orthogonal(::X, ::Z) = Y()
+@inline orthogonal(::Z, ::X) = Y()
+@inline orthogonal(::Y, ::Z) = X()
+@inline orthogonal(::Z, ::Y) = X()
+
 "1D staggered grid position (at the right boundary of a volume in a given direction)."
 struct Stag end
 

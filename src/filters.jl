@@ -182,3 +182,37 @@ surfacefilter!(uH::TensorField, uh, comp, filter_i) =
         k = filter_i ? i : j
         surfacefilter!(uH[i, j], uh[i, j], comp, k)
     end
+
+function linefilter!(uH::ScalarField, uh, comp, k)
+    (; grid, position) = uH
+    (; n, backend, workgroupsize) = grid
+    @kernel function Φ!(uH, uh, line)
+        x = @index(Global, Cartesian)
+        y = comp * (x - oneunit(x))
+        s = zero(eltype(uH))
+        for r in line
+            s += uh[y+r]
+        end
+        uH[x] = s / comp
+    end
+    ndrange = n, n, n
+    line = CartesianIndices(
+        map(
+            j -> j == k ? fineline(position[j], comp) : finepoint(position[j], comp),
+            directions(),
+        ),
+    )
+    Φ!(backend, workgroupsize)(uH, uh, line; ndrange)
+    uH
+end
+linefilter!(uH::VectorField, uh, comp) =
+    for i in directions()
+        linefilter!(uH[i], uh[i], comp, i)
+    end
+linefilter!(uH::TensorField, uh, comp) =
+    for j in directions(), i in directions()
+        if i != j
+            k = orthogonal(i, j)
+            linefilter!(uH[i, j], uh[i, j], comp, k)
+        end
+    end
