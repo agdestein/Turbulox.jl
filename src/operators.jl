@@ -340,33 +340,37 @@ function get_scale_numbers(u, visc)
     (; n) = grid
     T = eltype(u)
     uavg = sqrt(sum(abs2, u.data) / length(u.data))
+    TKE = uavg^2 / 2
     diss = ScalarField(grid)
     apply!(dissipation!, grid, diss, u, visc)
     D = sum(diss.data) / length(diss)
     eta = (visc^3 / D)^T(1 / 4)
-    λ = sqrt(5 * visc / D) * uavg
-    L = let
-        K = div(n, 2)
-        uhat = fft(u.data, 1:3)
-        uhat = uhat[ntuple(i->1:K, 3)..., :]
-        e = abs2.(uhat) ./ (2 * (n^3)^2)
-        kx = reshape(0:(K-1), :)
-        ky = reshape(0:(K-1), 1, :)
-        kz = reshape(0:(K-1), 1, 1, :)
-        @. e = e / sqrt(kx^2 + ky^2 + kz^2)
-        e = sum(e; dims = 4)
-        # Remove k=(0,...,0) component
-        # Note use of singleton range 1:1 instead of scalar index 1
-        # (otherwise CUDA gets annoyed)
-        e[1:1] .= 0
-        T(3π) / 2 / uavg^2 * sum(e)
-    end
+    λ = sqrt(visc / D) * uavg
+    L = uavg^3 / D
+    # L = if dointegral
+    #     K = div(n, 2)
+    #     uhat = fft(u.data, 1:3)
+    #     uhat = uhat[ntuple(i->1:K, 3)..., :]
+    #     e = abs2.(uhat) ./ (2 * (n^3)^2)
+    #     kx = reshape(0:(K-1), :)
+    #     ky = reshape(0:(K-1), 1, :)
+    #     kz = reshape(0:(K-1), 1, 1, :)
+    #     @. e = e / sqrt(kx^2 + ky^2 + kz^2)
+    #     e = sum(e; dims = 4)
+    #     # Remove k=(0,...,0) component
+    #     # Note use of singleton range 1:1 instead of scalar index 1
+    #     # (otherwise CUDA gets annoyed)
+    #     e[1:1] .= 0
+    #     T(3π) / 2 / uavg^2 * sum(e)
+    # else
+    #     nothing
+    # end
     t_int = L / uavg
     t_tay = λ / uavg
     t_kol = visc / D |> sqrt
     Re_int = L * uavg / visc
-    Re_tay = λ * uavg / sqrt(T(3)) / visc
-    Re_kol = eta * uavg / sqrt(T(3)) / visc
+    Re_tay = λ * uavg / visc
+    Re_kol = eta * uavg / visc
     (; uavg, D, L, λ, eta, t_int, t_tay, t_kol, Re_int, Re_tay, Re_kol)
 end
 

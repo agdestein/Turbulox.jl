@@ -1,5 +1,4 @@
 @testitem "Commutation" begin
-
     x, y, z = X(), Y(), Z()
     compression = 5
     g_dns = Grid(; n = 50, L = 1.0)
@@ -36,14 +35,7 @@
 
     # Scalar field in pressure point
     let
-        for (i, j, k) in (
-            (x, y, z),
-            (x, z, y),
-            (y, x, z),
-            (y, z, x),
-            (z, x, y),
-            (z, y, x),
-            )
+        for (i, j, k) in ((x, y, z), (x, z, y), (y, x, z), (y, z, x), (z, x, y), (z, y, x))
             p = ScalarField(g_dns, randn(g_dns.n, g_dns.n, g_dns.n))
             xp = ScalarField(vectorposition(j), g_dns)
             lp = ScalarField(g_les)
@@ -101,7 +93,4 @@
 
     sy_δx_σxy.data
     δx_lx_σxy.data
-
-
-
 end
