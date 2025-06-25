@@ -339,7 +339,7 @@ function get_scale_numbers(u, visc)
     (; grid) = u
     (; n) = grid
     T = eltype(u)
-    uavg = sqrt(sum(abs2, u.data) / length(u.data))
+    uavg = sqrt(sum(abs2, u.data) / grid.n^3)
     TKE = uavg^2 / 2
     diss = ScalarField(grid)
     apply!(dissipation!, grid, diss, u, visc)
