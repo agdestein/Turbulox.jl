@@ -97,8 +97,11 @@ function randomfield(grid, poisson; A = 1, kp = 10, rng = Random.default_rng())
     u
 end
 
-energyprofile(k2, (; amplitude, kpeak)) =
-    amplitude * k2^2 / kpeak^5 * exp(-2 * k2 / kpeak^2)
+# energyprofile(k2, (; amplitude, kpeak)) =
+#     amplitude * k2^2 / kpeak^5 * exp(-2 * k2 / kpeak^2)
+
+energyprofile(kpeak) = k -> k^4 *  exp(-2 * (k / kpeak)^2)
+
 
 """
 Make random velocity field with prescribed energy spectrum profile.
@@ -151,6 +154,105 @@ function randomfield_simple(profile, grid, poisson; rng = Random.default_rng(), 
     # differences, this is no longer exactly the case. So we project again
     # to correct for this (minor?) error.
     project!(u, p, poisson)
+
+    # The velocity now has
+    # the correct spectrum,
+    # random phase shifts,
+    # random orientations, 
+    # and is also divergence free.
+    u
+end
+
+
+"""
+Make random velocity field with prescribed energy spectrum profile.
+
+Note: The profile takes the scalar wavenumber norm as input,
+define it as `profile(k)`.
+"""
+function randomfield_shell(profile, grid, poisson; totalenergy = 1, rng = Random.default_rng())
+    # Compute energy (also remove FFT coefficient n^3)
+    @kernel function energy!(E, uhat, n)
+        I = @index(Global, Cartesian)
+        ux, uy, uz = uhat[I, 1], uhat[I, 2], uhat[I, 3]
+        E[I] = (abs2(ux) + abs2(uy) + abs2(uz)) / 2 / (n^3)^2
+    end
+
+    # Mask for active wavenumbers: kleft ≤ k < kleft + 1
+    # Do everything squared to avoid floats
+    @kernel function mask!(mask, kleft, n)
+        I = @index(Global, Cartesian)
+        # Like fftfreq, but with integer instead of Float64
+        kx = I[1] - 1
+        ky = (I[2]-1-ifelse(I[2] <= (n+1) >> 1, 0, n))
+        kz = (I[3]-1-ifelse(I[3] <= (n+1) >> 1, 0, n))
+        mask[I] = kleft^2 ≤ kx^2 + ky^2 + kz^2 < (kleft + 1)^2
+    end
+
+    # Adjust the amplitude to match energy profile
+    @kernel function normalize!(uhat, mask, factor)
+        I = @index(Global, Cartesian)
+        ux, uy, uz = uhat[I, 1], uhat[I, 2], uhat[I, 3]
+        if mask[I]
+            uhat[I, 1] *= factor
+            uhat[I, 2] *= factor
+            uhat[I, 3] *= factor
+        end
+    end
+
+    # Create random field and make it divergence free
+    u = VectorField(grid)
+    randn!(rng, u.data)
+    p = ScalarField(grid)
+    project!(u, p, poisson)
+
+    # RFFT exploits conjugate symmetry, so we only need half the modes
+    ndrange = div(grid.n, 2) + 1, grid.n, grid.n
+
+    # Allocate arrays
+    E = similar(p.data, ndrange...)
+    Emask = similar(E)
+    mask = similar(E, Bool)
+
+    # Plan transform
+    plan = plan_rfft(u.data, 1:3)
+
+    # Fourier coefficients of velocity field
+    uhat = plan * u.data
+
+    # Compute energy
+    apply!(energy!, grid, E, uhat, grid.n; ndrange)
+
+    # Maximum partially resolved wavenumber (sqrt(dim) * kmax)
+    kdiag =  floor(Int, sqrt(3) * div(grid.n, 2))
+
+    # Adjust energy in each partially resolved shell [k, k+1)
+    for k in 0:kdiag
+        apply!(mask!, grid, mask, k, grid.n; ndrange) # Shell mask
+        @. Emask = mask * E 
+        Eshell = sum(Emask) # Current energy in shell
+        E0 = profile(k) # Desired energy in shell
+        factor = sqrt(E0 / Eshell) # E = u^2 / 2
+        apply!(normalize!, grid, uhat, mask, factor; ndrange)
+    end
+
+    # Set constant mode to zero (broadcast since uhat may be a GPU array)
+    uhat[1:1] .= 0
+
+    # Inverse transform
+    ldiv!(u.data, plan, uhat)
+
+    # Normally, adjusting the amplitude of the 3D vector uhat(k)
+    # does not remove divergence freeness, since the divergence becomes
+    # i k dot uhat(k) in  Fourier space, which stays zero if uhat is scaled.
+    # But since our divergence is discrete, defined through staggered finite
+    # differences, this is no longer exactly the case. So we project again
+    # to correct for this (minor?) error.
+    project!(u, p, poisson)
+
+    # Adjust total energy
+    E = sum(abs2, u.data) / 2 / grid.n^3
+    u.data .*= sqrt(totalenergy / E)
 
     # The velocity now has
     # the correct spectrum,

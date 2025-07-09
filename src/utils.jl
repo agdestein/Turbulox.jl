@@ -42,7 +42,7 @@ function spectral_stuff(grid; npoint = 100)
     (; inds, k = kuse, K, uhat_i, ehat, plan)
 end
 
-function spectrum(u; npoint = 100, stuff = spectral_stuff(grid; npoint))
+function spectrum(u; npoint = 100, stuff = spectral_stuff(u.grid; npoint))
     (; grid) = u
     (; n) = grid
     T = eltype(u)
