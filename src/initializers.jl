@@ -163,7 +163,6 @@ function randomfield_simple(profile, grid, poisson; rng = Random.default_rng(), 
     u
 end
 
-
 """
 Make random velocity field with prescribed energy spectrum profile.
 
@@ -183,9 +182,9 @@ function randomfield_shell(profile, grid, poisson; totalenergy = 1, rng = Random
     @kernel function mask!(mask, kleft, n)
         I = @index(Global, Cartesian)
         # Like fftfreq, but with integer instead of Float64
-        kx = I[1] - 1
-        ky = (I[2]-1-ifelse(I[2] <= (n+1) >> 1, 0, n))
-        kz = (I[3]-1-ifelse(I[3] <= (n+1) >> 1, 0, n))
+        kx = I[1] - 1 # RFFT x-wavenumber
+        ky = wavenumber(I[2], n) # FFT wavenumber
+        kz = wavenumber(I[3], n) # FFT wavenumber
         mask[I] = kleft^2 ≤ kx^2 + ky^2 + kz^2 < (kleft + 1)^2
     end
 
