@@ -21,8 +21,11 @@ wavenumber(i, n) = i-1-ifelse(i <= (n+1) >> 1, 0, n)
 """
 Precompute wavenumber shell indices and
 create cache arrays for spectrum computation.
+
+If `npoint` is nothing, the spectrum is computed for all resolved shells.
+If `npoint = 100`, the spectrum is only computed for 100 evenly log-spaced wavenumbers.
 """
-function spectral_stuff(grid; npoint = 100)
+function spectral_stuff(grid; npoint = nothing)
     (; L, backend) = grid
     T = typeof(L)
 
@@ -39,8 +42,12 @@ function spectral_stuff(grid; npoint = 100)
     kksort = kk[isort]
 
     # Output query points (evenly log-spaced, but only integer wavenumbers)
-    kuse = logrange(T(1), T(kmax), npoint)
-    kuse = sort(unique(round.(Int, kuse)))
+    if isnothing(npoint)
+        kuse = 1:kmax
+    else
+        kuse = logrange(T(1), T(kmax), npoint)
+        kuse = sort(unique(round.(Int, kuse)))
+    end
 
     # Since the wavenumbers are sorted, we just need to find the start and stop of each shell.
     # The linear indices for that shell is then given by the permutation in that range.
@@ -89,7 +96,7 @@ function spectral_stuff(grid; npoint = 100)
     (; shells = inds, k = kuse, uhat, ehat, plan)
 end
 
-function spectrum(u; npoint = 100, stuff = spectral_stuff(u.grid; npoint))
+function spectrum(u; npoint = nothing, stuff = spectral_stuff(u.grid; npoint))
     (; grid) = u
     (; shells, k, uhat, ehat, plan) = stuff
     fill!(ehat, 0)
