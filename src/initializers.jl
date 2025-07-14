@@ -193,9 +193,9 @@ function randomfield_shell(profile, grid, poisson; totalenergy = 1, rng = Random
         I = @index(Global, Cartesian)
         ux, uy, uz = uhat[I, 1], uhat[I, 2], uhat[I, 3]
         if mask[I]
-            uhat[I, 1] *= factor
-            uhat[I, 2] *= factor
-            uhat[I, 3] *= factor
+            uhat[I, 1] = factor * ux
+            uhat[I, 2] = factor * uy
+            uhat[I, 3] = factor * uz
         end
     end
 
@@ -206,7 +206,8 @@ function randomfield_shell(profile, grid, poisson; totalenergy = 1, rng = Random
     project!(u, p, poisson)
 
     # RFFT exploits conjugate symmetry, so we only need half the modes
-    ndrange = div(grid.n, 2) + 1, grid.n, grid.n
+    kmax = div(grid.n, 2)
+    ndrange = kmax + 1, grid.n, grid.n
 
     # Allocate arrays
     E = similar(p.data, ndrange...)
@@ -229,7 +230,7 @@ function randomfield_shell(profile, grid, poisson; totalenergy = 1, rng = Random
     for k in 0:kdiag
         apply!(mask!, grid, mask, k, grid.n; ndrange) # Shell mask
         @. Emask = mask * E 
-        Eshell = sum(Emask) # Current energy in shell
+        Eshell = sum(Emask) + sum(view(Emask, 2:kmax, :, :)) # Current energy in shell
         E0 = profile(k) # Desired energy in shell
         factor = sqrt(E0 / Eshell) # E = u^2 / 2
         apply!(normalize!, grid, uhat, mask, factor; ndrange)
